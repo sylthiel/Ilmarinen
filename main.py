@@ -27,11 +27,16 @@ class ChessBoardWidget(QWidget):
         self.setLayout(grid)
 
         font = self.font()  # Get the default font
-        font.setPointSize(20)  # Increase font size
-
+        font.setPointSize(40)  # Increase font size
+        # font.setWeight(QFont.Bold)
         for row, col in product(range(8), repeat=2):
             button = QPushButton(self)
-            button.setStyleSheet("background-color: white;")
+            # button.setStyleSheet("background-color: white;")
+            # button.setStyleSheet("background-color: white; border:1px solid black;")
+            if (row + col) % 2 == 0:
+                button.setStyleSheet("background-color: white; color: black; border:1px solid black;font-weight: bold")
+            else:
+                button.setStyleSheet("background-color: lightblue; color: black; border:1px solid black;font-weight: bold")
             button.setFixedSize(50, 50)  # Make buttons square
             button.setFont(font)  # Set the font
             grid.addWidget(button, row, col)
