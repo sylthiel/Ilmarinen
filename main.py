@@ -7,7 +7,7 @@ import chess.engine
 from uuid import uuid4
 from multiprocessing import Process, Queue
 import asyncio
-
+from qasync import QEventLoop, asyncSlot
 
 class GameState:
     def __init__(self, fen='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'):
@@ -214,43 +214,41 @@ class ChessEngineWidget(CustomWidget):
         self.engine_path = None
         self.analysis_button.setEnabled(False)
 
+    @asyncSlot()
     async def start_analysis_async(self):
-        print("Start analysis async")  # Start of the method debug output
+        print("Start analysis async")
         self.should_stop_analysis = False
         try:
             transport, engine = await chess.engine.popen_uci(self.engine_path)
             self.board = self.linked_board_widget.game_state.board
-            # print(self.board)
-            # Here we use the async context manager for analysis
-            with await engine.analysis(self.board) as analysis:
+            starting_analysis_board = self.board.fen()
+            with await engine.analysis(self.board, multipv=self.num_lines) as analysis:
                 i = 0
                 async for info in analysis:
+                    # Check if board state has changed
+                    print(self.linked_board_widget.game_state.board.fen())
+                    print(self.board.fen())
+                    if starting_analysis_board != self.linked_board_widget.game_state.board.fen():
+                        print("board has changed")
+                        # If it has, stop the analysis
+                        self.should_stop_analysis = True
+                        # self.board = self.linked_board_widget.game_state.board
                     if self.should_stop_analysis:
                         break
-                    # print(info.get("score"), info.get("pv"))
                     score, pv = info.get("score"), info.get("pv")
                     if score and pv:
-                        print(score, pv)
-                    # Arbitrary stop condition.
-                    i+=1
+                        self.update_results(info)
+                    i += 1
                     if i > 1e5:
                         break
-
-
-                # i = 0
-                # print(analysis)
-                # async for info in analysis:  # Note: this has to be async too
-                #     print(f"Iteration: {i}")  # Checking on the loop progress
-                #     print(info)
-                #     # print(info.get("score"), info.get("pv"))
-                #     self.update_results(info)
-                #     if i > 10:  # limit the number of engine analysis iterations
-                #         break
-                #     i += 1
-                #     # await asyncio.sleep(1)  # delay prevents exception
             await engine.quit()
         except Exception as e:
-            print(f"Error in start_analysis_async: {str(e)}")  # If any exceptions occur, print them
+            print(f"Error in start_analysis_async: {str(e)}")
+
+        # If the board state changed and analysis was stopped, restart with the new board state
+        if self.should_stop_analysis and starting_analysis_board != self.linked_board_widget.game_state.board.fen():
+            self.board = self.linked_board_widget.game_state.board
+            await self.start_analysis_async()
 
     def toggle_analysis(self):
         print("Toggle analysis")  # Start of the method debug output
@@ -275,23 +273,34 @@ class ChessEngineWidget(CustomWidget):
             # print(f"Error in toggle_analysis: {str(e)}")  # If any exceptions occur, print them
 
     def parse_info(self, info):
-        # Adjust parse function to handle multiple lines
         try:
             pv = [str(move) for move in info["pv"]]
-            lines = "\n".join(map(str, pv))
-            return ("Depth: {depth}/{seldepth}\n"
-                    "Score: {score}\n"
-                    "Lines:\n{lines}"
-                    .format(depth=info["depth"], seldepth=info["depth"], score=info["score"], lines=lines))
+            lines = " ".join(map(str, pv))
+            # get values from info or default to None if they are not existent
+            depth, seldepth = info.get("depth", None), info.get("seldepth", None)
+            score = info.get("score", None)
+            multipv = info.get("multipv", None)
+            return {"depth": f"{depth}/{seldepth}", "score": score, "lines": lines, "multipv": multipv}
         except Exception as e:
             print(str(e))
 
     def update_results(self, result):
         parsed_result = self.parse_info(result)
-        # Separate the lines from other info and update QTextEdits
-        analysis, lines = parsed_result.rsplit("\n\nLines:\n", 1)
+        analysis = f"Evaluation: {parsed_result.get('score')} Depth: {parsed_result.get('depth')}"
+        lines = parsed_result.get("lines")
+        multipv = parsed_result.get("multipv", 1)  # if multipv doesn't exist we default to 1 (first line)
+
         self.analysis_text.setText(analysis)
-        self.best_moves_text.setText(lines)
+
+        # Here we check if we already have the mv line already in our QTextEdit
+        # If we have we just update that line, if not we append a new line
+        current_best_moves = self.best_moves_text.toPlainText().split('\n')
+        if multipv <= len(current_best_moves):
+            current_best_moves[
+                multipv - 1] = f"{multipv}. {lines}"  # Remember that multipv is 1-indexed but Python lists are 0-indexed
+        else:
+            current_best_moves.append(f"{multipv}. {lines}")
+        self.best_moves_text.setText("\n".join(current_best_moves))
 
     def analysis_finished(self):
         self.results_text.append("\nAnalysis finished!")
@@ -423,9 +432,11 @@ class MainWindow(QWidget):
 
 if __name__ == "__main__":
     app = QApplication([])
-
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop)
     mainWindow = MainWindow()
     mainWindow.show()
-
+    with loop:
+        loop.run_forever()
     app.exec()
 
