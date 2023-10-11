@@ -388,8 +388,8 @@ class MainWindow(QWidget):
         super().__init__()
         self.add_widget_message_box = QMessageBox(self)
         self.add_widget_message_box.setText("What type of widget do you want to add?")
-        self.add_widget_message_box.addButton("Board", QMessageBox.ButtonRole.AcceptRole)
-        self.add_widget_message_box.addButton("Engine", QMessageBox.ButtonRole.AcceptRole)
+        self.board_button = self.add_widget_message_box.addButton("Board", QMessageBox.ButtonRole.AcceptRole)
+        self.engine_button = self.add_widget_message_box.addButton("Engine", QMessageBox.ButtonRole.AcceptRole)
 
         self.layout = QHBoxLayout(self)
         self.add_button = QPushButton('+')
@@ -405,10 +405,11 @@ class MainWindow(QWidget):
         self.setLayout(self.layout)
 
     def add_widget_option(self):
-        result = self.add_widget_message_box.exec()
-        if result == 0:  # If the user clicked "Board"
+        self.add_widget_message_box.exec()
+        clicked_button = self.add_widget_message_box.clickedButton()
+        if clicked_button == self.board_button:  # If the user clicked "Board"
             self.add_new_board_widget()
-        elif result == 1:  # If the user clicked "Engine"
+        elif clicked_button == self.engine_button:  # If the user clicked "Engine"
             self.add_new_engine_widget()
 
     def add_widget_to_dict(self, widget):
@@ -432,10 +433,11 @@ class MainWindow(QWidget):
 
 if __name__ == "__main__":
     app = QApplication([])
-    loop = QEventLoop(app)
-    asyncio.set_event_loop(loop)
     mainWindow = MainWindow()
     mainWindow.show()
+    #async magic that fixes the backend process stopping UI interaction
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop)
     with loop:
         loop.run_forever()
     app.exec()
