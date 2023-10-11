@@ -1,25 +1,84 @@
-from PyQt6.QtWidgets import QApplication, QWidget, QGridLayout, QPushButton, QHBoxLayout
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QPushButton, QHBoxLayout, QVBoxLayout, QLabel,
+                             QFileDialog, QMessageBox, QTextEdit, QInputDialog)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from itertools import product
+import chess
+import chess.engine
+from uuid import uuid4
+from multiprocessing import Process, Queue
+import asyncio
 
-class ChessBoardWidget(QWidget):
+
+class GameState:
+    def __init__(self, fen='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'):
+        # self.fen = fen
+        self.board = chess.Board(fen)
+
+    def get_legal_moves(self):
+        return self.board.legal_moves
+
+
+class AnalysisThread(QThread):
+    analysis_done = pyqtSignal(object)
+    stop_signal = pyqtSignal()
+
+    def __init__(self, engine, board):
+        super().__init__()
+        self.engine = engine
+        self.board = board
+        self.stop_signal.connect(self.stop)
+        self.running = True
+
+    def run(self):
+        while self.running:
+            # Adjust the multipv parameter to the number of lines to output
+            info = self.engine.analyse(self.board, chess.engine.Limit(time=1.0), multipv=self.num_lines)
+            self.analysis_done.emit(info)
+            QThread.msleep(500)  # Optional: put some interval between updates
+
+    def stop(self):
+        self.running = False
+
+
+class CustomWidget(QWidget):
     def __init__(self):
         super().__init__()
+        self.id = uuid4()
+
+    def get_id(self):
+        return str(self.id)
+
+
+class ChessBoardWidget(CustomWidget):
+    def __init__(self):
+        super().__init__()
+        self.board = [[None] * 8 for _ in range(8)]  # Nested list to store all buttons
+        self.game_state = None
         self.initUI()
         self.selected_button = None
 
+
     def buttonClicked(self):
         sender = self.sender()  # Get the button that was clicked
-
+        # print(sender.square_name)
         if self.selected_button is None:
             # No piece currently selected, so select this button
-            self.selected_button = sender
+            if sender.text() != "":
+                self.selected_button = sender
         else:
             # Move the piece from the selected button to this button
-            piece = self.selected_button.text()
-            sender.setText(piece)
-            self.selected_button.setText("")
-            self.selected_button = None
+            from_square = chess.parse_square(self.selected_button.square_name)  # assuming buttons have names set as square names
+            to_square = chess.parse_square(sender.square_name)
+            move = chess.Move(from_square, to_square)
+            if move in self.game_state.get_legal_moves():
+                piece = self.selected_button.text()
+                sender.setText(piece)
+                self.game_state.board.push(move)
+                self.selected_button.setText("")
+                self.selected_button = None
+            else:
+                print(f"{self.selected_button.square_name} to {sender.square_name} is an illegal move ")
+                self.selected_button = None
 
     def initUI(self):
         grid = QGridLayout()
@@ -31,15 +90,16 @@ class ChessBoardWidget(QWidget):
         # font.setWeight(QFont.Bold)
         for row, col in product(range(8), repeat=2):
             button = QPushButton(self)
-            # button.setStyleSheet("background-color: white;")
-            # button.setStyleSheet("background-color: white; border:1px solid black;")
             if (row + col) % 2 == 0:
-                button.setStyleSheet("background-color: white; color: black; border:1px solid black;font-weight: bold")
+                button.setStyleSheet("background-color: white; color: black; border:1px solid black;")
             else:
-                button.setStyleSheet("background-color: lightblue; color: black; border:1px solid black;font-weight: bold")
+                button.setStyleSheet("background-color: lightblue; color: black; border:1px solid black;")
             button.setFixedSize(50, 50)  # Make buttons square
             button.setFont(font)  # Set the font
             grid.addWidget(button, row, col)
+            self.board[row][col] = button
+            button.square_name = chr(ord('a') + col) + str(8 - row)
+            button.clicked.connect(self.buttonClicked)
 
         reset_button = QPushButton("Reset Board")
         reset_button.clicked.connect(self.resetBoard)
@@ -52,13 +112,43 @@ class ChessBoardWidget(QWidget):
         grid.addLayout(layout, 8, 0, 1, 8)
 
         self.setWindowTitle("Chess Board")
+        self.resetBoard()
+        self.getBoardState()
+
+    def getBoardState(self):
+        fen_arr = []  # Initialize an empty list to store the FEN strings
+        for row in range(8):
+            empty_spaces = 0
+            for col in range(8):
+                button = self.board[row][col]  # Get the button at the (row, col) position
+                piece = button.text()  # Get the text of the button, which represents the piece
+                if piece:  # If there is a piece on the button
+                    if empty_spaces > 0:
+                        fen_arr.append(str(empty_spaces))
+                        empty_spaces = 0
+                    fen_arr.append(self.pieceToFEN(piece))
+                else:
+                    empty_spaces += 1
+            if empty_spaces > 0:
+                fen_arr.append(str(empty_spaces))
+            fen_arr.append("/")  # insert a line break for each row
+        fen_string = "".join(fen_arr[:-1]) # Convert the list to a string, but excluding the last "/"
+        print(fen_string)
+        return fen_string  # Return the FEN string
+
+    def pieceToFEN(self, piece):
+        piece_map = {
+            "♜": "r", "♞": "n", "♝": "b", "♛": "q", "♚": "k", "♟": "p",
+            "♖": "R", "♘": "N", "♗": "B", "♕": "Q", "♔": "K", "♙": "P"
+        }
+        return piece_map.get(piece, "")
 
     def resetBoard(self):
         piece_map = {
             "R": "♜", "N": "♞", "B": "♝", "Q": "♛", "K": "♚", "P": "♟",
             "r": "♖", "n": "♘", "b": "♗", "q": "♕", "k": "♔", "p": "♙"
         }
-
+        self.game_state = GameState()
         for row, col in product(range(8), repeat=2):
             button = self.layout().itemAtPosition(row, col).widget()
             button.setText(piece_map.get(self.getPieceAtPosition(row, col), ""))
@@ -74,14 +164,268 @@ class ChessBoardWidget(QWidget):
         return starting_positions.get((row, col), "")
 
 
+class ChessEngineWidget(CustomWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Create a QVBoxLayout instance
+        self.layout = QVBoxLayout(self)
+        self.link_board_button = QPushButton('Link board')
+        self.link_board_button.clicked.connect(self.link_board)
+        # Create QPushButton for browsing file
+        self.browse_button = QPushButton('Browse UCI engine...')
+        self.browse_button.clicked.connect(self.browse_file)
+        self.best_moves_text = QTextEdit()
+        self.analysis_text = QTextEdit()
+        # Create QPushButton for adding more best lines
+        self.add_line_button = QPushButton("More lines", self)
+        self.add_line_button.clicked.connect(self.add_line)
+        self.num_lines = 1
+        # Create QPushButton for removing best lines
+        self.remove_line_button = QPushButton("Less lines", self)
+        self.remove_line_button.clicked.connect(self.remove_line)
+        # Create QLabel for showing the selected file
+        self.file_label = QLabel('No file selected.')
+        self.analysis_update_timer = QTimer()
+        self.analysis_update_timer.timeout.connect(self.update_results)
+        # Create QPushButton for starting analysis
+        self.analysis_button = QPushButton('Start analysis')
+        self.analysis_button.clicked.connect(self.toggle_analysis)
+        self.engine = None
+        self.analysis_result = None
+        # Create QTextEdit for showing the analysis results
+        self.results_text = QTextEdit()
+        self.should_stop_analysis = False
+
+        # Add all widgets to the layout
+        self.layout.addWidget(self.browse_button)
+        self.layout.addWidget(self.file_label)
+        self.layout.addWidget(self.analysis_button)
+        self.layout.addWidget(self.results_text)
+        self.layout.addWidget(self.link_board_button)
+        self.layout.addWidget(self.analysis_text)
+        self.layout.addWidget(self.best_moves_text)
+        self.layout.addWidget(self.add_line_button)
+        self.layout.addWidget(self.remove_line_button)
+        # Set layout
+        self.setLayout(self.layout)
+
+        # Initially, no engine is selected
+        self.engine_path = None
+        self.analysis_button.setEnabled(False)
+
+    async def start_analysis_async(self):
+        print("Start analysis async")  # Start of the method debug output
+        self.should_stop_analysis = False
+        try:
+            transport, engine = await chess.engine.popen_uci(self.engine_path)
+            self.board = self.linked_board_widget.game_state.board
+            # print(self.board)
+            # Here we use the async context manager for analysis
+            with await engine.analysis(self.board) as analysis:
+                i = 0
+                async for info in analysis:
+                    if self.should_stop_analysis:
+                        break
+                    # print(info.get("score"), info.get("pv"))
+                    score, pv = info.get("score"), info.get("pv")
+                    if score and pv:
+                        print(score, pv)
+                    # Arbitrary stop condition.
+                    i+=1
+                    if i > 1e5:
+                        break
+
+
+                # i = 0
+                # print(analysis)
+                # async for info in analysis:  # Note: this has to be async too
+                #     print(f"Iteration: {i}")  # Checking on the loop progress
+                #     print(info)
+                #     # print(info.get("score"), info.get("pv"))
+                #     self.update_results(info)
+                #     if i > 10:  # limit the number of engine analysis iterations
+                #         break
+                #     i += 1
+                #     # await asyncio.sleep(1)  # delay prevents exception
+            await engine.quit()
+        except Exception as e:
+            print(f"Error in start_analysis_async: {str(e)}")  # If any exceptions occur, print them
+
+    def toggle_analysis(self):
+        print("Toggle analysis")  # Start of the method debug output
+        try:
+            if not self.engine_path:
+                self.file_label.setText('No engine file selected.')
+                return
+
+            if self.analysis_button.text() == "Start analysis":
+                self.analysis_button.setText("Stop analysis")
+                if not hasattr(self, 'linked_board_widget'):
+                    QMessageBox.critical(self, "Error", "No board linked to this engine", QMessageBox.Ok)
+                    return
+
+                asyncio.run(self.start_analysis_async())  # Debug message surrounding the call in question
+                print("Start analysis call completed")  # Completion of the call debug output
+            else:
+                self.analysis_button.setText("Start analysis")
+                self.should_stop_analysis = True
+        except Exception as e:
+            pass
+            # print(f"Error in toggle_analysis: {str(e)}")  # If any exceptions occur, print them
+
+    def parse_info(self, info):
+        # Adjust parse function to handle multiple lines
+        try:
+            pv = [str(move) for move in info["pv"]]
+            lines = "\n".join(map(str, pv))
+            return ("Depth: {depth}/{seldepth}\n"
+                    "Score: {score}\n"
+                    "Lines:\n{lines}"
+                    .format(depth=info["depth"], seldepth=info["depth"], score=info["score"], lines=lines))
+        except Exception as e:
+            print(str(e))
+
+    def update_results(self, result):
+        parsed_result = self.parse_info(result)
+        # Separate the lines from other info and update QTextEdits
+        analysis, lines = parsed_result.rsplit("\n\nLines:\n", 1)
+        self.analysis_text.setText(analysis)
+        self.best_moves_text.setText(lines)
+
+    def analysis_finished(self):
+        self.results_text.append("\nAnalysis finished!")
+        self.analysis_button.setText('Start analysis')
+
+    def add_line(self):
+        self.num_lines += 1
+
+    def remove_line(self):
+        if self.num_lines > 1:
+            self.num_lines -= 1
+
+    def browse_file(self):
+        file_dialog = QFileDialog()
+        filename, _ = file_dialog.getOpenFileName()
+        if filename:
+            # Successfully selected a file.
+            # Update the label and keep track of the file's path
+            self.file_label.setText(f'Selected engine: {filename}')
+            # print(filename)
+            self.engine_path = filename
+            self.analysis_button.setEnabled(True)
+
+    def start_analysis(self):
+        print("Entered start_analysis")
+        if self.engine_path:
+            print("Engine path is:")
+            print(self.engine_path)
+            # Check if a board has been linked to the engine
+            if not hasattr(self, 'linked_board_widget'):
+                QMessageBox.critical(self, "Error", "No board linked to this engine", QMessageBox.Ok)
+                return
+
+            # Prevent engine re-selection during analysis
+            self.browse_button.setEnabled(False)
+            self.analysis_button.setEnabled(False)
+
+            # Set up the engine
+            self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
+            print(self.engine)
+            try:
+                # Start async engine analysis
+                self.board = self.linked_board_widget.game_state.board  # You will get board from main app
+                self.info = self.engine.analyse(self.board, chess.engine.Limit(time=1.0))
+
+                # Update the QTextEdit with analysis results
+                self.results_text.setText(str(self.info))
+            except Exception as e:
+                print('Error during analysis:', str(e))
+            finally:
+                self.browse_button.setEnabled(True)
+                self.analysis_button.setEnabled(True)
+        else:
+            # No file has been selected
+            self.file_label.setText('No engine file selected.')
+    def link_board(self):
+        items, ok = QInputDialog.getItem(
+            self, "Select target board", "Please select the board to link this engine to",
+            self.available_boards(), editable=False)
+        # print(items, ok)
+        if ok and items:
+            item_uuid = items.split(":")[-1]  # assuming uuid at the end
+            linked_board_widget = self.get_main_window().widgetDict[ChessBoardWidget].get(item_uuid)
+            if linked_board_widget:
+                self.linked_board_widget = linked_board_widget
+                self.link_board_button.setText("Linked to Board " + str(items))
+            else:
+                QMessageBox.critical(self, "Error",
+                                     "Failed to link the selected board",
+                                     QMessageBox.Ok)
+
+    def get_main_window(self):
+        parent = self.parent()
+        while parent is not None:
+            if isinstance(parent, MainWindow):
+                return parent
+            parent = parent.parent()
+        return None  # Can't find MainWindow instance, something went wrong
+
+    def available_boards(self):
+        return list(self.get_main_window().widgetDict[ChessBoardWidget].keys())
+
+class MainWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.add_widget_message_box = QMessageBox(self)
+        self.add_widget_message_box.setText("What type of widget do you want to add?")
+        self.add_widget_message_box.addButton("Board", QMessageBox.ButtonRole.AcceptRole)
+        self.add_widget_message_box.addButton("Engine", QMessageBox.ButtonRole.AcceptRole)
+
+        self.layout = QHBoxLayout(self)
+        self.add_button = QPushButton('+')
+        self.add_button.clicked.connect(self.add_widget_option)
+
+        self.widgetDict = {}
+
+        self.layout.addWidget(self.add_button)
+
+        self.initial_widget = ChessBoardWidget()
+        self.layout.addWidget(self.initial_widget)
+        self.add_widget_to_dict(self.initial_widget)
+        self.setLayout(self.layout)
+
+    def add_widget_option(self):
+        result = self.add_widget_message_box.exec()
+        if result == 0:  # If the user clicked "Board"
+            self.add_new_board_widget()
+        elif result == 1:  # If the user clicked "Engine"
+            self.add_new_engine_widget()
+
+    def add_widget_to_dict(self, widget):
+        # If this widget's class is not in the dictionary, add it
+        if widget.__class__ not in self.widgetDict:
+            self.widgetDict[widget.__class__] = {}
+
+        # Add the widget to the appropriate class dictionary
+        self.widgetDict[widget.__class__][widget.get_id()] = widget
+
+    def add_new_board_widget(self):
+        new_board = ChessBoardWidget()
+        self.layout.addWidget(new_board)
+        self.add_widget_to_dict(new_board)  # add the new board to the dict
+
+    def add_new_engine_widget(self):
+        new_engine = ChessEngineWidget()
+        self.layout.addWidget(new_engine)
+        self.add_widget_to_dict(new_engine)  # add the new engine to the dict
+
+
 if __name__ == "__main__":
     app = QApplication([])
-    widget = ChessBoardWidget()
 
-    # Connect the buttonClicked slot to each button's clicked signal
-    for row, col in product(range(8), repeat=2):
-        button = widget.layout().itemAtPosition(row, col).widget()
-        button.clicked.connect(widget.buttonClicked)
+    mainWindow = MainWindow()
+    mainWindow.show()
 
-    widget.show()
     app.exec()
+
