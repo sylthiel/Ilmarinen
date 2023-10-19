@@ -1,52 +1,44 @@
-from PyQt6.QtWidgets import QWidget, QMessageBox, QHBoxLayout, QPushButton
+import asyncio
 
-from Ilmarinen.chess_board_widget import ChessBoardWidget
+from PyQt6.QtWidgets import QWidget, QGridLayout, QApplication
+from qasync import QEventLoop
+
+from Ilmarinen.chess_board_widget import ChessBoardWithControls
 from Ilmarinen.chess_engine_widget import ChessEngineWidget
 
 
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.add_widget_message_box = QMessageBox(self)
-        self.add_widget_message_box.setText("What type of widget do you want to add?")
-        self.board_button = self.add_widget_message_box.addButton("Board", QMessageBox.ButtonRole.AcceptRole)
-        self.engine_button = self.add_widget_message_box.addButton("Engine", QMessageBox.ButtonRole.AcceptRole)
-
-        self.layout = QHBoxLayout(self)
-        self.add_button = QPushButton('+')
-        self.add_button.clicked.connect(self.add_widget_option)
-
+        self.layout = QGridLayout(self)
+        self.chess_board = ChessBoardWithControls()
+        self.chess_engine = ChessEngineWidget(self)
         self.widgetDict = {}
+        self.addWidget(ChessBoardWithControls(), 0, 0)
+        self.layout.setRowStretch(0, 2)
+        self.layout.setColumnStretch(0, 2)
+        self.addWidget(ChessEngineWidget(self),1, 0, 1, 1)
+        self.layout.setRowStretch(1, 1)
+        self.layout.setColumnStretch(1, 1)
 
-        self.layout.addWidget(self.add_button)
+        # print(self.widgetDict)
 
-        self.initial_widget = ChessBoardWidget()
-        self.layout.addWidget(self.initial_widget)
-        self.add_widget_to_dict(self.initial_widget)
-        self.setLayout(self.layout)
 
-    def add_widget_option(self):
-        self.add_widget_message_box.exec()
-        clicked_button = self.add_widget_message_box.clickedButton()
-        if clicked_button == self.board_button:  # If the user clicked "Board"
-            self.add_new_board_widget()
-        elif clicked_button == self.engine_button:  # If the user clicked "Engine"
-            self.add_new_engine_widget()
-
-    def add_widget_to_dict(self, widget):
-        # If this widget's class is not in the dictionary, add it
+    def addWidget(self, widget, row, col, h=1, w=1):
+        self.layout.addWidget(widget, row, col, h, w)
         if widget.__class__ not in self.widgetDict:
             self.widgetDict[widget.__class__] = {}
+        self.widgetDict[widget.__class__][widget.uuid] = widget
 
-        # Add the widget to the appropriate class dictionary
-        self.widgetDict[widget.__class__][widget.get_id()] = widget
 
-    def add_new_board_widget(self):
-        new_board = ChessBoardWidget()
-        self.layout.addWidget(new_board)
-        self.add_widget_to_dict(new_board)  # add the new board to the dict
-
-    def add_new_engine_widget(self):
-        new_engine = ChessEngineWidget(self)
-        self.layout.addWidget(new_engine)
-        self.add_widget_to_dict(new_engine)  # add the new engine to the dict
+if __name__ == '__main__':
+    app = QApplication([])
+    mainWindow = MainWindow()
+    mainWindow.resize(1000, 1000)
+    mainWindow.show()
+    # async magic that fixes the backend process stopping UI interaction
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop)
+    with loop:
+        loop.run_forever()
+    app.exec()
