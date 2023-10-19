@@ -1,136 +1,203 @@
-import os
 from itertools import product
 
+from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGridLayout, QWidget, \
+    QPushButton, QGraphicsPixmapItem, QGraphicsItem
+from PyQt6.QtGui import QColor, QPen, QPixmap
+from PyQt6.QtCore import Qt , QRectF
+import sys, os
 import chess
-from PyQt6.QtGui import QFontDatabase, QFont
-from PyQt6.QtWidgets import QGridLayout, QPushButton, QHBoxLayout
+from uuid import uuid4
 
-from Ilmarinen.custom_widget import CustomWidget
-from Ilmarinen.game_state import GameState
+class GameState:
+    def __init__(self):
+        self.board = chess.Board()
+
+    def move_piece(self, start_square, end_square):
+        print(f'Attempting move {start_square+end_square}')
+        try:
+            move = chess.Move.from_uci(start_square + end_square)
+        except chess.InvalidMoveError:
+            return False
+        if move in self.board.legal_moves:
+            # print(f"Making move {move}")
+            self.board.push(move)
+            return True
+        return False
 
 
-class ChessBoardWidget(CustomWidget):
+class ChessSquare(QGraphicsRectItem):
+    def __init__(self, x, y, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 0, 0 by default is a8 1,0 is a7
+        self.square_name = chr(ord('a')+x) + str(8-y)
+        self.coordinates = (x, y)
+        # self.setFlags(self.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+
+
+class Chessboard(QGraphicsView):
+    def __init__(self):
+        super(Chessboard, self).__init__()
+        self.flipped = False
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+        self.game_state = GameState()
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+        cbp = os.path.join(os.getcwd(), 'resources', 'chessboard' + os.sep)
+        self.piece_translation = {
+            'R': cbp + 'white-rook.png',
+            'N': cbp + 'white-knight.png',
+            'B': cbp + 'white-bishop.png',
+            'Q': cbp + 'white-queen.png',
+            'K': cbp + 'white-king.png',
+            'P': cbp + 'white-pawn.png',
+            'r': cbp + 'black-rook.png',
+            'n': cbp + 'black-knight.png',
+            'b': cbp + 'black-bishop.png',
+            'q': cbp + 'black-queen.png',
+            'k': cbp + 'black-king.png',
+            'p': cbp + 'black-pawn.png'
+        }
+
+        self.selected_square = None
+        self.squares = [[None for _ in range(8)] for _ in range(8)]
+        self.pieces = [[None for _ in range(8)] for _ in range(8)]
+        self.draw_board()
+        # self.flip_board()
+
+    def resizeEvent(self, event):
+        self.setSceneRect(QRectF(self.viewport().rect()))
+        self.redraw_board()
+        super().resizeEvent(event)
+
+    def reset_board(self):
+        self.game_state = GameState()
+        self.refresh_board()
+
+    def flip_board(self):
+        self.flipped = not self.flipped
+        # self.squares = [list(reversed(row)) for row in reversed(self.squares)]
+        for row, col in product(range(8), repeat=2):
+            square = self.squares[row][col]
+            old_name = square.square_name
+            square.square_name = chr(ord('h') - ord(old_name[0]) + ord('a')) + str(8 - int(old_name[1]) + 1)
+        self.refresh_board()
+
+    def mousePressEvent(self, event):
+        item = self.itemAt(event.pos())
+        if isinstance(item, QGraphicsPixmapItem):
+            square = item.square
+        else:
+            square = item
+        if isinstance(square, ChessSquare):
+            # print(f"Entered mouse press event with {square.square_name}")
+            # print(f"Currently selected is {self.selected_square}")
+            if self.selected_square is None:
+                # piece = self.game_state.board.piece_at(chess.square(square.coordinates[0], 7 - square.coordinates[1]))
+                piece = self.game_state.board.piece_at(chess.parse_square(square.square_name))
+                if piece is not None:
+                    self.selected_square = square
+            else:
+                if self.game_state.move_piece(self.selected_square.square_name, square.square_name):
+                    self.refresh_board()
+                    self.selected_square = None
+                else:
+                    self.selected_square = None
+        super().mousePressEvent(event)
+
+    def refresh_board(self):
+        # print('-----------'*3)
+        for i in range(8):
+            for j in range(8):
+                # remove the previous piece on this square if it exists
+                if self.pieces[i][j] is not None:
+                    self.scene.removeItem(self.pieces[i][j])
+                    self.pieces[i][j] = None
+
+                flip_adjusted_j = j if self.flipped else 7 - j
+                flip_adjusted_i = 7-i if self.flipped else i
+                piece = self.game_state.board.piece_at(chess.square(flip_adjusted_i, flip_adjusted_j))
+                # print(f"I'm at {i} {j} and got piece {piece}")
+                if piece is not None:
+                    # print(f'At position {i} {j} there is {piece}')
+                    # print(f'Trying to get piece {piece} at square {i}x{j}')
+                    pixmap = QPixmap(self.piece_translation[str(piece)])
+                    pixmap_item = QGraphicsPixmapItem(pixmap.scaled(
+                        int(self.squares[i][j].rect().width()),
+                        int(self.squares[i][j].rect().height()),
+                        Qt.AspectRatioMode.KeepAspectRatio
+                    ))
+                    pixmap_item.square = self.squares[i][j]
+                    pixmap_item.setPos(self.squares[i][j].rect().left(), self.squares[i][j].rect().top())
+                    self.scene.addItem(pixmap_item)
+                    self.pieces[i][j] = pixmap_item
+
+    def draw_board(self):
+        # print('Entered draw board')
+        for row in range(8):
+            for col in range(8):
+                square = self.squares[row][col]
+                if square is not None:
+                    self.scene.removeItem(square)
+                    self.squares[row][col] = None
+
+        self.squares = [[None for _ in range(8)] for _ in range(8)]
+
+        rect_width = self.width() // 8
+        rect_height = self.height() // 8
+        colors = [QColor('white'), QColor('gray')]
+
+        for i in range(8):
+            for j in range(8):
+                # rect = QGraphicsRectItem(QRectF(i * rect_width, j * rect_height, rect_width, rect_height))
+                rect = ChessSquare(i, j, QRectF(i * rect_width, j * rect_height, rect_width, rect_height))
+                pen = QPen()
+                pen.setStyle(Qt.PenStyle.NoPen)
+                rect.setPen(pen)
+                rect.setBrush(colors[((i % 2) + j) % 2])
+                self.scene.addItem(rect)
+                self.squares[i][j] = rect
+        # print("After draw_board()")
+        # print(self.squares)
+        self.refresh_board()
+
+    def redraw_board(self):
+        rect_width = self.width() // 8
+        rect_height = self.height() // 8
+        for row in range(8):
+            for col in range(8):
+                square = self.squares[row][col]
+                self.scene.removeItem(square)
+        for row in range(8):
+            for col in range(8):
+                square = self.squares[row][col]
+                square.setRect(row*rect_width, col*rect_height, rect_width, rect_height)
+                self.scene.addItem(square)
+        self.refresh_board()
+
+
+class ChessBoardWithControls(QWidget):
     def __init__(self):
         super().__init__()
-        self.board = [[None] * 8 for _ in range(8)]  # Nested list to store all buttons
-        self.game_state = None
-        self.initUI()
-        self.selected_button = None
+        self.uuid = str(uuid4())
+        layout = QGridLayout()
+        self.chessboard = Chessboard()
+        self.reset_button = QPushButton("Reset board")
+        self.reset_button.clicked.connect(self.chessboard.reset_board)
+        self.flip_button = QPushButton("Flip board")
+        self.flip_button.clicked.connect(self.chessboard.flip_board)
+        layout.addWidget(self.chessboard, 0, 0, 1, 2)
+        # layout.setRowStretch(0, 1)
+        # layout.setColumnStretch(0, 1)
+        layout.addWidget(self.reset_button, 1, 0, 1, 1)
+        layout.addWidget(self.flip_button, 1, 1, 1, 1)
+        self.setLayout(layout)
+        self.setWindowTitle('Chess Board')
 
 
-    def buttonClicked(self):
-        sender = self.sender()  # Get the button that was clicked
-        # print(sender.square_name)
-        if self.selected_button is None:
-            # No piece currently selected, so select this button
-            if sender.text() != "":
-                self.selected_button = sender
-        else:
-            # Move the piece from the selected button to this button
-            from_square = chess.parse_square(self.selected_button.square_name)  # assuming buttons have names set as square names
-            to_square = chess.parse_square(sender.square_name)
-            move = chess.Move(from_square, to_square)
-            if move in self.game_state.get_legal_moves():
-                piece = self.selected_button.text()
-                sender.setText(piece)
-                self.game_state.board.push(move)
-                self.selected_button.setText("")
-                self.selected_button = None
-            else:
-                print(f"{self.selected_button.square_name} to {sender.square_name} is an illegal move ")
-                self.selected_button = None
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    my_app = ChessBoardWithControls()
+    my_app.resize(800, 800)
+    my_app.show()
 
-    def initUI(self):
-        grid = QGridLayout()
-        grid.setSpacing(0)  # Remove gaps between buttons
-        self.setLayout(grid)
-        dir_path = os.path.dirname(os.path.realpath(__file__))
-        font_path = os.path.join(dir_path, "chess-regular.TTF")
-        font_id = QFontDatabase.addApplicationFont(font_path)
-        if font_id != -1:
-            font_families = QFontDatabase.applicationFontFamilies(font_id)
-            font = QFont(font_families[0], 35)
-            self.used_font = 'custom'
-        else:
-            font = self.font()  # Get the default font
-            font.setPointSize(40)  # Increase font size
-            self.used_font = 'default'
-        if self.used_font is None or self.used_font != 'custom':
-            self.piece_map = {
-                "R": "♜", "N": "♞", "B": "♝", "Q": "♛", "K": "♚", "P": "♟",
-                "r": "♖", "n": "♘", "b": "♗", "q": "♕", "k": "♔", "p": "♙"
-            }
-        else:
-            # see chess-regular.ttf character mappings for more idea of wtf is going on
-            self.piece_map = {
-                "R": "r",
-                "N": "h",
-                "B": "b",
-                "K": "k",
-                "P": "p",
-                "Q": "q",
-                "r": "t",
-                "n": "j",
-                "b": "n",
-                "k": "l",
-                "q": "w",
-                "p": "o"
-            }
-        # font.setWeight(QFont.Bold)
-        for row, col in product(range(8), repeat=2):
-            button = QPushButton(self)
-            if (row + col) % 2 == 0:
-                button.setStyleSheet("background-color: white; color: black; border:1px solid black;")
-            else:
-                button.setStyleSheet("background-color: lightblue; color: black; border:1px solid black;")
-            button.setFixedSize(50, 50)  # Make buttons square
-            print(font)
-            button.setFont(font)  # Set the font
-            grid.addWidget(button, row, col)
-            self.board[row][col] = button
-            button.square_name = chr(ord('a') + col) + str(8 - row)
-            button.coordinates = (row, col)
-            button.clicked.connect(self.buttonClicked)
-
-        reset_button = QPushButton("Reset Board")
-        reset_button.clicked.connect(self.resetBoard)
-        flip_button = QPushButton("Flip Board")
-        flip_button.clicked.connect(self.flipBoard)
-        layout = QHBoxLayout()
-        layout.addStretch()
-        layout.addWidget(reset_button)
-        layout.addStretch()
-        layout.addWidget(flip_button)
-        layout.addStretch()
-
-        grid.addLayout(layout, 8, 0, 1, 8)
-
-        self.setWindowTitle("Chess Board")
-        self.resetBoard()
-
-
-    def refreshBoard(self):
-        for row, col in product(range(8), repeat=2):
-            button = self.board[row][col]
-            button.setText(self.piece_map.get(self.getPieceAtPosition(row, col), ""))
-    def flipBoard(self):
-        # self.game_state.flip()
-        self.board = [list(reversed(row)) for row in reversed(self.board)]
-        for row, col in product(range(8), repeat=2):
-            button = self.board[row][col]
-            old_name = button.square_name
-            new_name = chr(ord('h') - ord(old_name[0]) + ord('a')) + str(8 - int(old_name[1]) + 1)
-            button.square_name = new_name
-        self.refreshBoard()
-
-    def resetBoard(self):
-        self.game_state = GameState()
-        self.refreshBoard()
-
-    def getPieceAtPosition(self, row, col):
-        square = chess.square(col, 7 - row)  # python-chess treats rows from bottom to top
-        piece = self.game_state.board.piece_at(square)
-        if piece is None:  # if the square is empty
-            return ""
-        # Use .symbol() to get the piece's letter name
-        return piece.symbol()
+    sys.exit(app.exec())

@@ -3,10 +3,11 @@ import asyncio
 import chess
 import chess.engine
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QLabel, QMessageBox, QInputDialog, QFileDialog
+from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QLabel, QMessageBox, QInputDialog, QFileDialog, \
+    QGridLayout
 from qasync import asyncSlot
 
-from Ilmarinen.chess_board_widget import ChessBoardWidget
+from Ilmarinen.chess_board_widget import ChessBoardWithControls
 from Ilmarinen.custom_widget import CustomWidget
 
 
@@ -15,7 +16,7 @@ class ChessEngineWidget(CustomWidget):
         super().__init__()
         self.main_window = main_window
         # Create a QVBoxLayout instance
-        self.layout = QVBoxLayout(self)
+        self.layout = QGridLayout(self)
         self.link_board_button = QPushButton('Link board')
         self.link_board_button.clicked.connect(self.link_board)
         # Create QPushButton for browsing file
@@ -44,15 +45,19 @@ class ChessEngineWidget(CustomWidget):
         self.should_stop_analysis = False
 
         # Add all widgets to the layout
-        self.layout.addWidget(self.browse_button)
-        self.layout.addWidget(self.file_label)
-        self.layout.addWidget(self.analysis_button)
-        self.layout.addWidget(self.results_text)
-        self.layout.addWidget(self.link_board_button)
-        self.layout.addWidget(self.analysis_text)
-        self.layout.addWidget(self.best_moves_text)
-        self.layout.addWidget(self.add_line_button)
-        self.layout.addWidget(self.remove_line_button)
+        self.layout.addWidget(self.browse_button, 0, 0)
+        # self.layout.addWidget(self.file_label)
+        self.layout.addWidget(self.analysis_button, 0, 1)
+        # self.layout.addWidget(self.results_text, 1, 0)
+        self.layout.addWidget(self.link_board_button, 0, 2)
+        self.layout.addWidget(self.analysis_text, 2, 0, 1, 5)
+        self.layout.addWidget(self.best_moves_text, 3, 0, 1, 5)
+        self.layout.addWidget(self.add_line_button, 0, 3)
+        self.layout.addWidget(self.remove_line_button, 0, 4)
+        self.layout.setRowStretch(0, 1)
+        self.layout.setRowStretch(1, 5)
+        # self.layout.setRowStretch(2, 5)
+
         # Set layout
         self.setLayout(self.layout)
 
@@ -73,8 +78,8 @@ class ChessEngineWidget(CustomWidget):
                 i = 0
                 async for info in analysis:
                     # Check if board state has changed
-                    print(self.linked_board_widget.game_state.board.fen())
-                    print(self.board.fen())
+                    # print(self.linked_board_widget.game_state.board.fen())
+                    # print(self.board.fen())
                     if starting_analysis_board != self.linked_board_widget.game_state.board.fen():
                         print("board has changed")
                         # If it has, stop the analysis
@@ -87,20 +92,22 @@ class ChessEngineWidget(CustomWidget):
                         break
                     score, pv = info.get("score"), info.get("pv")
                     if score and pv:
+                        # print(score.score())
                         self.update_results(info)
                     i += 1
                     if i > 1e5:
                         break
             await engine.quit()
+            # If the board state changed and analysis was stopped, restart with the new board state
+            if self.should_stop_analysis and starting_analysis_board != self.linked_board_widget.game_state.board.fen():
+                self.board = self.linked_board_widget.game_state.board
+                await self.start_analysis_async()
+            if number_of_lines != self.num_lines:
+                await self.start_analysis_async()
         except Exception as e:
             print(f"Error in start_analysis_async: {str(e)}")
 
-        # If the board state changed and analysis was stopped, restart with the new board state
-        if self.should_stop_analysis and starting_analysis_board != self.linked_board_widget.game_state.board.fen():
-            self.board = self.linked_board_widget.game_state.board
-            await self.start_analysis_async()
-        if number_of_lines != self.num_lines:
-            await self.start_analysis_async()
+
 
     def toggle_analysis(self):
         print("Toggle analysis")  # Start of the method debug output
@@ -142,20 +149,21 @@ class ChessEngineWidget(CustomWidget):
         lines = parsed_result.get("lines")
         multipv = parsed_result.get("multipv", 1)  # if multipv doesn't exist we default to 1 (first line)
 
-        self.analysis_text.setText(analysis)
+        if multipv == 1:
+            self.analysis_text.setText(analysis)
 
         # Here we check if we already have the mv line already in our QTextEdit
         # If we have we just update that line, if not we append a new line
         current_best_moves = self.best_moves_text.toPlainText().split('\n')
         if multipv <= len(current_best_moves):
             current_best_moves[
-                multipv - 1] = f"{multipv}. {lines}"  # Remember that multipv is 1-indexed but Python lists are 0-indexed
+                multipv - 1] = f"{parsed_result.get('score').white()} {multipv}. {lines}"  # Remember that multipv is 1-indexed but Python lists are 0-indexed
         else:
             current_best_moves.append(f"{multipv}. {lines}")
         self.best_moves_text.setText("\n".join(current_best_moves))
 
     def analysis_finished(self):
-        self.results_text.append("\nAnalysis finished!")
+        # self.results_text.append("\nAnalysis finished!")
         self.analysis_button.setText('Start analysis')
 
     def add_line(self):
@@ -186,9 +194,9 @@ class ChessEngineWidget(CustomWidget):
         # print(items, ok)
         if ok and items:
             item_uuid = items.split(":")[-1]  # assuming uuid at the end
-            linked_board_widget = self.get_main_window().widgetDict[ChessBoardWidget].get(item_uuid)
+            linked_board_widget = self.get_main_window().widgetDict[ChessBoardWithControls].get(item_uuid)
             if linked_board_widget:
-                self.linked_board_widget = linked_board_widget
+                self.linked_board_widget = linked_board_widget.chessboard
                 self.link_board_button.setText("Linked to Board " + str(items))
             else:
                 QMessageBox.critical(self, "Error",
@@ -199,4 +207,7 @@ class ChessEngineWidget(CustomWidget):
         return self.main_window
 
     def available_boards(self):
-        return list(self.get_main_window().widgetDict[ChessBoardWidget].keys())
+        # print(f'Getting main window widget dict')
+        # # print(f'{self.get_main_window().widgetDict}')
+        # print(f'{self.get_main_window().widgetDict[ChessBoardWithControls].keys()}')
+        return list(self.get_main_window().widgetDict[ChessBoardWithControls].keys())
