@@ -1,4 +1,4 @@
-from enum import Enum
+from aenum import Enum
 from typing import Callable
 from uuid import uuid4
 import chess, chess.pgn
@@ -11,6 +11,7 @@ class Event(Enum):
     BoardMove = "BoardMove"
     BoardChange = "BoardChange"
     BoardCreated = "BoardCreated"
+    # replace Event logic due to switching to aenum.Enum allowing extend_enum()
 
 
 class EventValidator:
