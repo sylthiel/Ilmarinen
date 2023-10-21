@@ -15,6 +15,7 @@ class ChessEngineWidget(CustomWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window
+        self.analysis_running = False
         # Create a QVBoxLayout instance
         self.layout = QGridLayout(self)
         self.link_board_button = QPushButton('Link board')
@@ -65,49 +66,39 @@ class ChessEngineWidget(CustomWidget):
         self.engine_path = None
         self.analysis_button.setEnabled(False)
 
+    def board_changed(self, **kwargs):
+        self.should_stop_analysis = True
+        if self.analysis_running:
+            asyncio.run(self.start_analysis_async())
+
     @asyncSlot()
     async def start_analysis_async(self):
         print("Start analysis async")
         self.should_stop_analysis = False
+        self.analysis_running = True
         try:
             transport, engine = await chess.engine.popen_uci(self.engine_path)
             self.board = self.linked_board_widget.game_state.board
-            starting_analysis_board = self.board.fen()
             number_of_lines = self.num_lines
             with await engine.analysis(self.board, multipv=self.num_lines) as analysis:
                 i = 0
                 async for info in analysis:
-                    # Check if board state has changed
-                    # print(self.linked_board_widget.game_state.board.fen())
-                    # print(self.board.fen())
-                    if starting_analysis_board != self.linked_board_widget.game_state.board.fen():
-                        print("board has changed")
-                        # If it has, stop the analysis
-                        self.should_stop_analysis = True
-                        # self.board = self.linked_board_widget.game_state.board
-
                     if number_of_lines != self.num_lines:
                         self.should_stop_analysis = True
+                        self.analysis_running = False
                     if self.should_stop_analysis:
                         break
                     score, pv = info.get("score"), info.get("pv")
                     if score and pv:
-                        # print(score.score())
                         self.update_results(info)
                     i += 1
                     if i > 1e5:
                         break
             await engine.quit()
-            # If the board state changed and analysis was stopped, restart with the new board state
-            if self.should_stop_analysis and starting_analysis_board != self.linked_board_widget.game_state.board.fen():
-                self.board = self.linked_board_widget.game_state.board
-                await self.start_analysis_async()
             if number_of_lines != self.num_lines:
                 await self.start_analysis_async()
         except Exception as e:
             print(f"Error in start_analysis_async: {str(e)}")
-
-
 
     def toggle_analysis(self):
         print("Toggle analysis")  # Start of the method debug output
