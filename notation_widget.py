@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit
 
 from Ilmarinen.custom_widget import CustomWidget
+from Ilmarinen.widgethub import Event
 
 
 class NotationWidget(CustomWidget):
@@ -28,9 +29,13 @@ class NotationWidget(CustomWidget):
     def get_pgn(self):
         return str(self.board.game_state.game)
 
+    def handle_move(self, **kwargs):
+        # placeholder logic, need to add handling for vartiations, main variations etc.
+        new_node = self.latest_node.add_variation(kwargs.get("move"))
+        self.latest_node = new_node
+        self.update_pgn_display()
+        self.board.hub.produce_event(Event.BoardChange)
 
-    def set_latest_node(self, node):
-        self.latest_node = node
     def update_pgn_display(self):
         pgn = self.get_pgn()  # Get the PGN from your chess board object
         self.pgn_display.setPlainText(pgn)
@@ -41,7 +46,6 @@ class NotationWidget(CustomWidget):
             self.current_move -= 1
             print(f"self.latest_node is {self.latest_node}")
             print(f"parent is {self.latest_node.parent}")
-
             self.go_to_move(self.latest_node.parent)  # Update your chess board object to this move
             # self.latest_node = self.latest_node.parent
             self.update_pgn_display()
@@ -52,6 +56,7 @@ class NotationWidget(CustomWidget):
         self.board.game_state.board.set_fen(node.board().fen())
         self.latest_node = node
         self.board.refresh_board()
+
     def move_forward(self):
         # Comparing with the total number of moves, which should be retrieved from your chess board object
         next_move = self.latest_node.next()

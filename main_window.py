@@ -12,25 +12,32 @@ from Ilmarinen.widgethub import WidgetHub, Event
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
+        self.hub = WidgetHub()
         self.layout = QGridLayout(self)
-        self.chess_board = ChessBoardWithControls()
-        self.chess_engine = ChessEngineWidget(self)
+        self.chess_engine = ChessEngineWidget(self, self.hub)
+        self.hub.register_listener(self.chess_engine, {
+            Event.BoardChange: self.chess_engine.board_changed,
+            Event.BoardCreated: self.chess_engine.board_created_event
+        })
+        self.chess_board = ChessBoardWithControls(self.hub)
+
         self.widgetDict = {}
         self.addWidget(self.chess_board, 0, 0)
         self.layout.setRowStretch(0, 2)
         self.layout.setColumnStretch(0, 2)
-        self.addWidget(ChessEngineWidget(self),1, 0, 1, 1)
+        self.addWidget(self.chess_engine, 1, 0, 1, 1)
         self.layout.setRowStretch(1, 1)
         self.layout.setColumnStretch(1, 1)
         self.notation_widget = NotationWidget(self.chess_board.chessboard)
         self.layout.addWidget(self.notation_widget, 0, 1, 1, 1)
-        self.hub = WidgetHub()
+
         self.hub.register_listener(self.chess_board.chessboard,
                                    {Event.BoardChange: self.chess_board.chessboard.refresh_board})
-        self.hub.register_listener(self.chess_engine,{Event.BoardChange: self.chess_engine.board_changed})
+
+        self.hub.register_listener(self.notation_widget,
+                                   {Event.GameMove: self.notation_widget.handle_move})
         # self.chess_board.chessboard.set_child_notation(self.notation_widget)
         # print(self.widgetDict)
-
 
     def addWidget(self, widget, row, col, h=1, w=1):
         self.layout.addWidget(widget, row, col, h, w)

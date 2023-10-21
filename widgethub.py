@@ -3,11 +3,14 @@ from typing import Callable
 from uuid import uuid4
 import chess, chess.pgn
 
+import Ilmarinen.chess_board_widget
+
 
 class Event(Enum):
     GameMove = "GameMove"
     BoardMove = "BoardMove"
     BoardChange = "BoardChange"
+    BoardCreated = "BoardCreated"
 
 
 class EventValidator:
@@ -19,7 +22,9 @@ class EventValidator:
             # Event.BoardMove:
             #     {'move': chess.Move},
             Event.BoardChange:
-                {'board': chess.Board}
+                {'board': chess.Board},
+            Event.BoardCreated:
+                {'board': Ilmarinen.chess_board_widget.Chessboard}
         }
 
     def validate_event(self, event: Event, **kwargs):
@@ -71,6 +76,9 @@ class WidgetHub:
 
     def produce_event(self, event: Event, **kwargs):
         try:
-            return self.validator.validate_event(event, **kwargs)
+            if self.validator.validate_event(event, **kwargs):
+                for subscriber, function in self.subscribers[event]:
+                    # print(f"Invoking {function} for subscriber {subscriber}")
+                    function(**kwargs)
         except Exception as e:
             print(f'Produce event failed with {str(e)}')

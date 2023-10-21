@@ -12,8 +12,9 @@ from Ilmarinen.custom_widget import CustomWidget
 
 
 class ChessEngineWidget(CustomWidget):
-    def __init__(self, main_window):
+    def __init__(self, main_window, hub):
         super().__init__()
+        self.hub = hub
         self.main_window = main_window
         self.analysis_running = False
         # Create a QVBoxLayout instance
@@ -43,8 +44,8 @@ class ChessEngineWidget(CustomWidget):
         self.analysis_result = None
         # Create QTextEdit for showing the analysis results
         self.results_text = QTextEdit()
-        self.should_stop_analysis = False
-
+        self.should_stop_analysis = asyncio.Event()
+        self.analysis_running = asyncio.Event()
         # Add all widgets to the layout
         self.layout.addWidget(self.browse_button, 0, 0)
         # self.layout.addWidget(self.file_label)
@@ -66,27 +67,30 @@ class ChessEngineWidget(CustomWidget):
         self.engine_path = None
         self.analysis_button.setEnabled(False)
 
-    def board_changed(self, **kwargs):
-        self.should_stop_analysis = True
-        if self.analysis_running:
-            asyncio.run(self.start_analysis_async())
-
+    @asyncSlot()
+    async def board_changed(self, **kwargs):
+        # No need to call asyncio.run
+        if self.analysis_running.is_set():
+            self.should_stop_analysis.set()
+            while self.analysis_running.is_set():
+                await asyncio.sleep(0.1)  # microseconds to wait, you can adjust this as needed
+            # asyncio.create_task(self.start_analysis_async())  # start the analysis
+            await self.start_analysis_async()
     @asyncSlot()
     async def start_analysis_async(self):
-        print("Start analysis async")
-        self.should_stop_analysis = False
-        self.analysis_running = True
+        # print("Start analysis async")
+        self.should_stop_analysis = asyncio.Event()
+        self.analysis_running.set()
         try:
             transport, engine = await chess.engine.popen_uci(self.engine_path)
-            self.board = self.linked_board_widget.game_state.board
+
             number_of_lines = self.num_lines
-            with await engine.analysis(self.board, multipv=self.num_lines) as analysis:
+            with await engine.analysis(self.linked_board_widget, multipv=self.num_lines) as analysis:
                 i = 0
                 async for info in analysis:
                     if number_of_lines != self.num_lines:
-                        self.should_stop_analysis = True
-                        self.analysis_running = False
-                    if self.should_stop_analysis:
+                        self.should_stop_analysis.set()
+                    if self.should_stop_analysis.is_set():
                         break
                     score, pv = info.get("score"), info.get("pv")
                     if score and pv:
@@ -99,8 +103,11 @@ class ChessEngineWidget(CustomWidget):
                 await self.start_analysis_async()
         except Exception as e:
             print(f"Error in start_analysis_async: {str(e)}")
+        finally:
+            self.analysis_running.clear()
 
-    def toggle_analysis(self):
+    @asyncSlot()
+    async def toggle_analysis(self):
         print("Toggle analysis")  # Start of the method debug output
         try:
             if not self.engine_path:
@@ -112,15 +119,18 @@ class ChessEngineWidget(CustomWidget):
                 if not hasattr(self, 'linked_board_widget'):
                     QMessageBox.critical(self, "Error", "No board linked to this engine", QMessageBox.Ok)
                     return
-
-                asyncio.run(self.start_analysis_async())  # Debug message surrounding the call in question
+                await self.start_analysis_async()  # Debug message surrounding the call in question
                 print("Start analysis call completed")  # Completion of the call debug output
             else:
                 self.analysis_button.setText("Start analysis")
                 self.should_stop_analysis = True
         except Exception as e:
-            pass
-            # print(f"Error in toggle_analysis: {str(e)}")  # If any exceptions occur, print them
+            print(f"Error in toggle_analysis: {str(e)}")  # If any exceptions occur, print them
+
+    def board_created_event(self, **kwargs):
+        print(f'Entered board_created_event with {kwargs}')
+        self.linked_board_widget = kwargs.get('board').game_state.board
+        self.link_board_button.setText("Linked to Board " + kwargs.get('board').parent.uuid)
 
     def parse_info(self, info):
         try:
@@ -134,9 +144,27 @@ class ChessEngineWidget(CustomWidget):
         except Exception as e:
             print(str(e))
 
+    def parse_evaluation(self, score):
+        centipawn_value = int(str(score))
+        printable = round(centipawn_value / 100, 2)
+        if -25 < centipawn_value < 25:
+            return f"= ({printable})"
+        elif 25 <= centipawn_value < 75:
+            return f"+= ({printable})"
+        elif 75 <= centipawn_value < 150:
+            return f"± ({printable})"
+        elif centipawn_value >= 150:
+            return f"+- ({printable})"
+        elif -25 >= centipawn_value > -75:
+            return f"-= ({printable})"
+        elif -75 >= centipawn_value > -150:
+            return f"∓ ({printable})"
+        else:
+            return f"-+ ({printable})"
+
     def update_results(self, result):
         parsed_result = self.parse_info(result)
-        analysis = f"Evaluation: {parsed_result.get('score')} Depth: {parsed_result.get('depth')}"
+        analysis = f"Evaluation: {self.parse_evaluation(parsed_result.get('score').white())} Depth: {parsed_result.get('depth')}"
         lines = parsed_result.get("lines")
         multipv = parsed_result.get("multipv", 1)  # if multipv doesn't exist we default to 1 (first line)
 
@@ -148,7 +176,7 @@ class ChessEngineWidget(CustomWidget):
         current_best_moves = self.best_moves_text.toPlainText().split('\n')
         if multipv <= len(current_best_moves):
             current_best_moves[
-                multipv - 1] = f"{parsed_result.get('score').white()} {multipv}. {lines}"  # Remember that multipv is 1-indexed but Python lists are 0-indexed
+                multipv - 1] = f"{self.parse_evaluation(parsed_result.get('score').white())} {multipv}. {lines}"  # Remember that multipv is 1-indexed but Python lists are 0-indexed
         else:
             current_best_moves.append(f"{multipv}. {lines}")
         self.best_moves_text.setText("\n".join(current_best_moves))

@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt , QRectF
 import sys, os
 import chess, chess.pgn
 from uuid import uuid4
+from Ilmarinen.widgethub import Event
 
 class GameState:
     def __init__(self, parent):
@@ -17,25 +18,19 @@ class GameState:
         print('I am gamestate in __init__')
 
     def move_piece(self, start_square, end_square):
-        print(f'Attempting move {start_square+end_square}')
+        # print(f'Attempting move {start_square+end_square}')
         try:
             move = chess.Move.from_uci(start_square + end_square)
         except chess.InvalidMoveError:
             return False
         if move in self.board.legal_moves:
             # print(f"Making move {move}")
-            print(f"Attempting to make move")
             self.board.push(move)
-            print(f"Currently child notation is {self.parent.child_notation}")
+            # print(f"Currently child notation is {self.parent.child_notation}")
             try:
-                game_node = self.parent.child_notation.latest_node.add_variation(move)
-                print("Created node")
-                print(game_node)
+                self.parent.hub.produce_event(Event.GameMove, move=move)
             except Exception as e:
                 print(e)
-
-            self.parent.child_notation.set_latest_node(game_node)
-            self.parent.child_notation.update_pgn_display()
             return True
         return False
 
@@ -50,9 +45,11 @@ class ChessSquare(QGraphicsRectItem):
 
 
 class Chessboard(QGraphicsView):
-    def __init__(self):
+    def __init__(self, parent, hub):
         print('Board is being created')
         super().__init__()
+        self.parent = parent
+        self.hub = hub
         self.flipped = False
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.game_state = GameState(self)
@@ -79,6 +76,7 @@ class Chessboard(QGraphicsView):
         self.pieces = [[None for _ in range(8)] for _ in range(8)]
         self.draw_board()
         self.child_notation = None
+        self.hub.produce_event(Event.BoardCreated, board=self)
         # self.flip_board()
 
     def set_child_notation(self, notation):
@@ -204,11 +202,12 @@ class Chessboard(QGraphicsView):
 
 
 class ChessBoardWithControls(QWidget):
-    def __init__(self):
+    def __init__(self, hub):
         super().__init__()
+        self.hub = hub
         self.uuid = str(uuid4())
         layout = QGridLayout()
-        self.chessboard = Chessboard()
+        self.chessboard = Chessboard(parent=self, hub=self.hub)
         self.reset_button = QPushButton("Reset board")
         self.reset_button.clicked.connect(self.chessboard.reset_board)
         self.flip_button = QPushButton("Flip board")
