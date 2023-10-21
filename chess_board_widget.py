@@ -1,16 +1,20 @@
 from itertools import product
 
+from PyQt6 import QtCore
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGridLayout, QWidget, \
     QPushButton, QGraphicsPixmapItem, QGraphicsItem
-from PyQt6.QtGui import QColor, QPen, QPixmap
+from PyQt6.QtGui import QColor, QPen, QPixmap, QImage
 from PyQt6.QtCore import Qt , QRectF
 import sys, os
-import chess
+import chess, chess.pgn
 from uuid import uuid4
 
 class GameState:
-    def __init__(self):
+    def __init__(self, parent):
         self.board = chess.Board()
+        self.game = chess.pgn.Game()
+        self.parent = parent
+        print('I am gamestate in __init__')
 
     def move_piece(self, start_square, end_square):
         print(f'Attempting move {start_square+end_square}')
@@ -20,7 +24,18 @@ class GameState:
             return False
         if move in self.board.legal_moves:
             # print(f"Making move {move}")
+            print(f"Attempting to make move")
             self.board.push(move)
+            print(f"Currently child notation is {self.parent.child_notation}")
+            try:
+                game_node = self.parent.child_notation.latest_node.add_variation(move)
+                print("Created node")
+                print(game_node)
+            except Exception as e:
+                print(e)
+
+            self.parent.child_notation.set_latest_node(game_node)
+            self.parent.child_notation.update_pgn_display()
             return True
         return False
 
@@ -36,10 +51,11 @@ class ChessSquare(QGraphicsRectItem):
 
 class Chessboard(QGraphicsView):
     def __init__(self):
-        super(Chessboard, self).__init__()
+        print('Board is being created')
+        super().__init__()
         self.flipped = False
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
-        self.game_state = GameState()
+        self.game_state = GameState(self)
         self.scene = QGraphicsScene(self)
         self.setScene(self.scene)
         cbp = os.path.join(os.getcwd(), 'resources', 'chessboard' + os.sep)
@@ -62,15 +78,19 @@ class Chessboard(QGraphicsView):
         self.squares = [[None for _ in range(8)] for _ in range(8)]
         self.pieces = [[None for _ in range(8)] for _ in range(8)]
         self.draw_board()
+        self.child_notation = None
         # self.flip_board()
 
+    def set_child_notation(self, notation):
+        print(f"{self} had its notation child set to {notation}")
+        self.child_notation = notation
     def resizeEvent(self, event):
         self.setSceneRect(QRectF(self.viewport().rect()))
         self.redraw_board()
         super().resizeEvent(event)
 
     def reset_board(self):
-        self.game_state = GameState()
+        self.game_state = GameState(self)
         self.refresh_board()
 
     def flip_board(self):
@@ -120,12 +140,20 @@ class Chessboard(QGraphicsView):
                 if piece is not None:
                     # print(f'At position {i} {j} there is {piece}')
                     # print(f'Trying to get piece {piece} at square {i}x{j}')
-                    pixmap = QPixmap(self.piece_translation[str(piece)])
-                    pixmap_item = QGraphicsPixmapItem(pixmap.scaled(
+                    image = QImage(self.piece_translation[str(piece)])
+                    scaled_image = image.scaled(
                         int(self.squares[i][j].rect().width()),
                         int(self.squares[i][j].rect().height()),
-                        Qt.AspectRatioMode.KeepAspectRatio
-                    ))
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        QtCore.Qt.TransformationMode.SmoothTransformation  # High quality filter
+                    )
+                    pixmap_item = QGraphicsPixmapItem(QPixmap.fromImage(scaled_image))
+                    # pixmap = QPixmap(self.piece_translation[str(piece)])
+                    # pixmap_item = QGraphicsPixmapItem(pixmap.scaled(
+                    #     int(self.squares[i][j].rect().width()),
+                    #     int(self.squares[i][j].rect().height()),
+                    #     Qt.AspectRatioMode.KeepAspectRatio
+                    # ))
                     pixmap_item.square = self.squares[i][j]
                     pixmap_item.setPos(self.squares[i][j].rect().left(), self.squares[i][j].rect().top())
                     self.scene.addItem(pixmap_item)
