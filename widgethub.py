@@ -3,7 +3,7 @@ from typing import Callable
 from uuid import uuid4
 import chess, chess.pgn
 
-import Ilmarinen.chess_board_widget
+# import Ilmarinen.chess_board_widget
 
 
 class Event(Enum):
@@ -17,6 +17,7 @@ class Event(Enum):
 class EventValidator:
     def __init__(self):
         # placeholder values
+        from Ilmarinen.chess_board_widget import Chessboard
         self.validations = {
             Event.GameMove:
                 {'move': chess.Move},
@@ -25,7 +26,9 @@ class EventValidator:
             Event.BoardChange:
                 {'board': chess.Board},
             Event.BoardCreated:
-                {'board': Ilmarinen.chess_board_widget.Chessboard}
+                {'board': Chessboard},
+            Event.BoardMove:
+                 {'move': chess.Move}
         }
 
     def validate_event(self, event: Event, **kwargs):

@@ -8,7 +8,8 @@ from PyQt6.QtCore import Qt , QRectF
 import sys, os
 import chess, chess.pgn
 from uuid import uuid4
-from Ilmarinen.widgethub import Event
+from Ilmarinen.widgethub import Event, WidgetHub
+
 
 class GameState:
     def __init__(self, parent):
@@ -25,7 +26,7 @@ class GameState:
             return False
         if move in self.board.legal_moves:
             # print(f"Making move {move}")
-            self.board.push(move)
+            # self.board.push(move)
             # print(f"Currently child notation is {self.parent.child_notation}")
             try:
                 self.parent.hub.produce_event(Event.GameMove, move=move)
@@ -45,11 +46,12 @@ class ChessSquare(QGraphicsRectItem):
 
 
 class Chessboard(QGraphicsView):
-    def __init__(self, parent, hub):
+    def __init__(self, parent, hub: WidgetHub):
         print('Board is being created')
         super().__init__()
         self.parent = parent
         self.hub = hub
+        self.hub.register_listener(self, {Event.BoardMove: self.board_move_event})
         self.flipped = False
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.game_state = GameState(self)
@@ -78,6 +80,9 @@ class Chessboard(QGraphicsView):
         self.child_notation = None
         self.hub.produce_event(Event.BoardCreated, board=self)
         # self.flip_board()
+
+    def board_move_event(self, move: chess.Move):
+        self.game_state.board.push(move)
 
     def set_child_notation(self, notation):
         print(f"{self} had its notation child set to {notation}")

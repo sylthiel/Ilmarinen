@@ -34,7 +34,9 @@ class NotationWidget(CustomWidget):
         new_node = self.latest_node.add_variation(kwargs.get("move"))
         self.latest_node = new_node
         self.update_pgn_display()
+        self.board.hub.produce_event(Event.BoardMove, move=kwargs.get("move"))
         self.board.hub.produce_event(Event.BoardChange)
+
 
     def update_pgn_display(self):
         pgn = self.get_pgn()  # Get the PGN from your chess board object
