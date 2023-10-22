@@ -76,25 +76,29 @@ class NotationWidget(CustomWidget):
         if node is None:
             node = self.latest_node.root()
         pgn_string = ''
-        for i, variation in enumerate(node.variations):
-            move_number = variation.ply()
-            move = variation.san()
+        if node.variations:
+            main_variation = node.variations[0]
+            move_number = main_variation.ply()
+            move = main_variation.san()
             color = 'white' if (move_number % 2 == 1) else 'black'
             if color == 'white':
-                pgn_move_string = f'<a href="#{str(variation.uuid)}">{move_number//2+1}. {move}</a>'
+                pgn_move_string = f'<a href="#{str(main_variation.uuid)}">{move_number // 2 + 1}. {move}</a>'
             else:
-                pgn_move_string = f'<a href="#{str(variation.uuid)}"> {move} </a>'
-
-            if i == 0:  # main_variant
-                pgn_string += pgn_move_string
-                pgn_string += self.generate_html_pgn(variation)
-            else:  # other_variations
+                pgn_move_string = f'<a href="#{str(main_variation.uuid)}"> {move} </a>'
+            pgn_string += pgn_move_string
+            for i, variation in enumerate(node.variations[1:], start=1):
+                move_number = variation.ply()
+                move = variation.san()
+                color = 'white' if (move_number % 2 == 1) else 'black'
+                if color == 'white':
+                    pgn_move_string = f'<a href="#{str(variation.uuid)}">{move_number // 2 + 1}. {move}</a>'
+                else:
+                    pgn_move_string = f'<a href="#{str(variation.uuid)}"> {move} </a>'
                 pgn_string += '('
                 pgn_string += pgn_move_string
                 pgn_string += self.generate_html_pgn(variation)
                 pgn_string += ') '
-            move_number += 1
-        print(self.get_pgn())
+            pgn_string += self.generate_html_pgn(main_variation)
         return pgn_string
     def go_to_move(self, node):
         print(f'Go to move requested to {node}, FEN:')
