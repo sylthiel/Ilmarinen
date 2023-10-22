@@ -31,8 +31,16 @@ class NotationWidget(CustomWidget):
 
     def handle_move(self, **kwargs):
         # placeholder logic, need to add handling for vartiations, main variations etc.
-        new_node = self.latest_node.add_variation(kwargs.get("move"))
-        self.latest_node = new_node
+        move = kwargs.get('move')
+        move_node = None
+        for variation in self.latest_node.variations:
+            if variation.move == move:
+                move_node = variation
+        if move_node:
+            self.latest_node = move_node
+        else:
+            new_node = self.latest_node.add_variation(kwargs.get("move"))
+            self.latest_node = new_node
         self.update_pgn_display()
         self.board.hub.produce_event(Event.BoardMove, move=kwargs.get("move"))
         self.board.hub.produce_event(Event.BoardChange)
@@ -58,6 +66,7 @@ class NotationWidget(CustomWidget):
         self.board.game_state.board.set_fen(node.board().fen())
         self.latest_node = node
         self.board.refresh_board()
+        self.board.hub.produce_event(Event.BoardChange)
 
     def move_forward(self):
         # Comparing with the total number of moves, which should be retrieved from your chess board object

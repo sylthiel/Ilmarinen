@@ -20,7 +20,6 @@ class MainWindow(QWidget):
             Event.BoardCreated: self.chess_engine.board_created_event
         })
         self.chess_board = ChessBoardWithControls(self.hub)
-
         self.widgetDict = {}
         self.addWidget(self.chess_board, 0, 0)
         self.layout.setRowStretch(0, 2)
