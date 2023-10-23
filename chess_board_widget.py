@@ -9,7 +9,7 @@ import sys, os
 import chess, chess.pgn
 from uuid import uuid4
 from Ilmarinen.widgethub import Event, WidgetHub
-
+from Ilmarinen.database_widget import DatabaseWidget
 
 class GameState:
     def __init__(self, parent):
@@ -96,6 +96,7 @@ class Chessboard(QGraphicsView):
         self.game_state = GameState(self)
         self.refresh_board()
 
+
     def flip_board(self):
         self.flipped = not self.flipped
         # self.squares = [list(reversed(row)) for row in reversed(self.squares)]
@@ -104,6 +105,12 @@ class Chessboard(QGraphicsView):
             old_name = square.square_name
             square.square_name = chr(ord('h') - ord(old_name[0]) + ord('a')) + str(8 - int(old_name[1]) + 1)
         self.refresh_board()
+
+    def handle_game_load(self, game: chess.pgn.Game):
+        self.game_state.game = game
+        self.game_state.board = game.board()
+        self.hub.produce_event(Event.BoardChange, board=self.game_state.board)
+        self.hub.produce_event(Event.GameLoaded)
 
     def mousePressEvent(self, event):
         item = self.itemAt(event.pos())
@@ -127,7 +134,7 @@ class Chessboard(QGraphicsView):
                     self.selected_square = None
         super().mousePressEvent(event)
 
-    def refresh_board(self):
+    def refresh_board(self, **kwargs):
         # print('-----------'*3)
         for i in range(8):
             for j in range(8):

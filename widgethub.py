@@ -11,6 +11,8 @@ class Event(Enum):
     BoardMove = "BoardMove"
     BoardChange = "BoardChange"
     BoardCreated = "BoardCreated"
+    GameLoad = "GameLoad"
+    GameLoaded = "GameLoaded"
     # replace Event logic due to switching to aenum.Enum allowing extend_enum()
 
 
@@ -21,14 +23,16 @@ class EventValidator:
         self.validations = {
             Event.GameMove:
                 {'move': chess.Move},
-            # Event.BoardMove:
-            #     {'move': chess.Move},
             Event.BoardChange:
                 {'board': chess.Board},
             Event.BoardCreated:
                 {'board': Chessboard},
             Event.BoardMove:
-                 {'move': chess.Move}
+                 {'move': chess.Move},
+            Event.GameLoad:
+                {'game': chess.pgn.Game},
+            Event.GameLoaded:
+                {}
         }
 
     def validate_event(self, event: Event, **kwargs):

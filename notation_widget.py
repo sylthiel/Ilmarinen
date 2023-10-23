@@ -34,8 +34,18 @@ class NotationWidget(CustomWidget):
     def link_clicked(self, url):
         node_uuid = url.toString()[1:]  # Remove the '#' in the URL
         node = self.uuid_to_node.get(node_uuid)
+        print(f"Clicking on {node_uuid}, going to {node}")
+        print(f"{self.uuid_to_node}")
         if node:
             self.go_to_move(node)
+
+    def handle_game_loaded(self):
+        self.latest_node = self.board.game_state.game
+        self.latest_node.uuid = uuid4()
+        # self.uuid_to_node = {self.latest_node.uuid: self.latest_node}
+        self.uuid_to_node = {}
+        self.traverse_and_generate_uuid()
+        self.update_pgn_display()
 
     def get_pgn(self):
         return str(self.board.game_state.game)
@@ -72,6 +82,16 @@ class NotationWidget(CustomWidget):
             # self.latest_node = self.latest_node.parent
             self.update_pgn_display()
 
+    def traverse_and_generate_uuid(self):
+        stack = [self.latest_node]
+        while stack:
+            node = stack.pop()
+            node.uuid = str(uuid4())
+            self.uuid_to_node[node.uuid] = node
+            stack.extend(child for child in node.variations)
+        print("Finished traversing")
+        print(self.uuid_to_node)
+
     def generate_html_pgn(self, node=None):
         if node is None:
             node = self.latest_node.root()
@@ -95,7 +115,7 @@ class NotationWidget(CustomWidget):
 
             pgn_string += (f'<a href="#{str(main_variation.uuid)}" style="color:darkgray;text-decoration:none;outline: '
                            f'none">{pgn_move_string}</a>')
-
+            print(pgn_string)
             for i, variation in enumerate(node.variations[1:], start=1):
                 move_number = variation.ply()
                 move = variation.san()

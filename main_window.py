@@ -1,48 +1,63 @@
 import asyncio
 
-from PyQt6.QtWidgets import QWidget, QGridLayout, QApplication
+from PyQt6.QtWidgets import QWidget, QGridLayout, QApplication, QTabWidget, QMainWindow
 from qasync import QEventLoop
 
 from Ilmarinen.chess_board_widget import ChessBoardWithControls
 from Ilmarinen.chess_engine_widget import ChessEngineWidget
+from Ilmarinen.database_widget import DatabaseWidget
 from Ilmarinen.notation_widget import NotationWidget
 from Ilmarinen.widgethub import WidgetHub, Event
 
 
-class MainWindow(QWidget):
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.tabWidget = QTabWidget(self)  # create QTabWidget
+
         self.hub = WidgetHub()
-        self.layout = QGridLayout(self)
+
+        self.chess_board = ChessBoardWithControls(self.hub)
         self.chess_engine = ChessEngineWidget(self, self.hub)
         self.hub.register_listener(self.chess_engine, {
             Event.BoardChange: self.chess_engine.board_changed,
             Event.BoardCreated: self.chess_engine.board_created_event
         })
-        self.chess_board = ChessBoardWithControls(self.hub)
-        self.widgetDict = {}
-        self.addWidget(self.chess_board, 0, 0)
-        self.layout.setRowStretch(0, 2)
-        self.layout.setColumnStretch(0, 2)
-        self.addWidget(self.chess_engine, 1, 0, 1, 1)
-        self.layout.setRowStretch(1, 1)
-        self.layout.setColumnStretch(1, 1)
+
         self.notation_widget = NotationWidget(self.chess_board.chessboard)
-        self.layout.addWidget(self.notation_widget, 0, 1, 1, 1)
 
-        self.hub.register_listener(self.chess_board.chessboard,
-                                   {Event.BoardChange: self.chess_board.chessboard.refresh_board})
+        self.hub.register_listener(self.chess_board.chessboard,{
+            Event.BoardChange: self.chess_board.chessboard.refresh_board,
+            Event.GameLoad: self.chess_board.chessboard.handle_game_load
+        })
 
-        self.hub.register_listener(self.notation_widget,
-                                   {Event.GameMove: self.notation_widget.handle_move})
-        # self.chess_board.chessboard.set_child_notation(self.notation_widget)
-        # print(self.widgetDict)
+        self.hub.register_listener(self.notation_widget,{
+            Event.GameMove: self.notation_widget.handle_move,
+            Event.GameLoaded: self.notation_widget.handle_game_loaded
+        })
 
-    def addWidget(self, widget, row, col, h=1, w=1):
-        self.layout.addWidget(widget, row, col, h, w)
-        if widget.__class__ not in self.widgetDict:
-            self.widgetDict[widget.__class__] = {}
-        self.widgetDict[widget.__class__][widget.uuid] = widget
+        self.create_first_tab()
+        self.create_second_tab()
+
+        self.setCentralWidget(self.tabWidget)  # set QTabWidget as the central widget
+
+    def create_first_tab(self):
+        tab1 = QWidget()
+        layout1 = QGridLayout(tab1)
+        layout1.addWidget(self.chess_board, 0, 0)
+        layout1.setRowStretch(0, 2)
+        layout1.addWidget(self.chess_engine, 1, 0, 1, 1)
+        layout1.setRowStretch(1, 1)
+        self.chess_board.chessboard.set_child_notation(self.notation_widget)
+        layout1.addWidget(self.notation_widget, 0, 1)
+        self.tabWidget.addTab(tab1, "First Tab")
+
+    def create_second_tab(self):
+        tab2 = QWidget()
+        layout2 = QGridLayout(tab2)
+        self.database_widget = DatabaseWidget(self.hub)
+        layout2.addWidget(self.database_widget)
+        self.tabWidget.addTab(tab2, "Second Tab")
 
 
 if __name__ == '__main__':
