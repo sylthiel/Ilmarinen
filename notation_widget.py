@@ -93,7 +93,7 @@ class NotationWidget(CustomWidget):
             if str(main_variation.uuid) == current_uuid:
                 pgn_move_string = current_move_css + pgn_move_string + end_current_move_css
 
-            pgn_string += (f'<a href="#{str(main_variation.uuid)}" style="color:black;text-decoration:none;outline: '
+            pgn_string += (f'<a href="#{str(main_variation.uuid)}" style="color:darkgray;text-decoration:none;outline: '
                            f'none">{pgn_move_string}</a>')
 
             for i, variation in enumerate(node.variations[1:], start=1):
