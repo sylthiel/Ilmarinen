@@ -75,29 +75,43 @@ class NotationWidget(CustomWidget):
     def generate_html_pgn(self, node=None):
         if node is None:
             node = self.latest_node.root()
+        current_uuid = None if not self.latest_node else str(self.latest_node.uuid)
+        current_move_css = '<span style="background-color:lightblue;color:black;">'
+        end_current_move_css = "</span>"
         pgn_string = ''
+
         if node.variations:
             main_variation = node.variations[0]
             move_number = main_variation.ply()
             move = main_variation.san()
             color = 'white' if (move_number % 2 == 1) else 'black'
             if color == 'white':
-                pgn_move_string = f'<a href="#{str(main_variation.uuid)}">{move_number // 2 + 1}. {move}</a>'
+                pgn_move_string = f'{move_number // 2 + 1}. {move}'
             else:
-                pgn_move_string = f'<a href="#{str(main_variation.uuid)}"> {move} </a>'
-            pgn_string += pgn_move_string
+                pgn_move_string = f' {move} '
+
+            if str(main_variation.uuid) == current_uuid:
+                pgn_move_string = current_move_css + pgn_move_string + end_current_move_css
+
+            pgn_string += (f'<a href="#{str(main_variation.uuid)}" style="color:black;text-decoration:none;outline: '
+                           f'none">{pgn_move_string}</a>')
+
             for i, variation in enumerate(node.variations[1:], start=1):
                 move_number = variation.ply()
                 move = variation.san()
                 color = 'white' if (move_number % 2 == 1) else 'black'
                 if color == 'white':
-                    pgn_move_string = f'<a href="#{str(variation.uuid)}">{move_number // 2 + 1}. {move}</a>'
+                    pgn_move_string = f'{move_number // 2 + 1}. {move}'
                 else:
-                    pgn_move_string = f'<a href="#{str(variation.uuid)}"> {move} </a>'
-                pgn_string += '('
-                pgn_string += pgn_move_string
-                pgn_string += self.generate_html_pgn(variation)
-                pgn_string += ') '
+                    pgn_move_string = f' {move} '
+
+                if str(variation.uuid) == current_uuid:
+                    pgn_move_string = current_move_css + pgn_move_string + end_current_move_css
+
+                pgn_string += (f'(<a href="#{str(variation.uuid)}" style="color:black;text-decoration:none;outline: '
+                               f'none">{pgn_move_string}</a>')
+                pgn_string += self.generate_html_pgn(variation) + ') '
+
             pgn_string += self.generate_html_pgn(main_variation)
         return pgn_string
     def go_to_move(self, node):
