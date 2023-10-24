@@ -16,13 +16,13 @@ class MainWindow(QMainWindow):
         self.tabWidget = QTabWidget(self)  # create QTabWidget
 
         self.hub = WidgetHub()
-
-        self.chess_board = ChessBoardWithControls(self.hub)
         self.chess_engine = ChessEngineWidget(self, self.hub)
         self.hub.register_listener(self.chess_engine, {
             Event.BoardChange: self.chess_engine.board_changed,
             Event.BoardCreated: self.chess_engine.board_created_event
         })
+        self.chess_board = ChessBoardWithControls(self.hub)
+
 
         self.notation_widget = NotationWidget(self.chess_board.chessboard)
 

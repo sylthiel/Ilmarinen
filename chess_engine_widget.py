@@ -70,12 +70,14 @@ class ChessEngineWidget(CustomWidget):
     @asyncSlot()
     async def board_changed(self, **kwargs):
         # No need to call asyncio.run
+        self.linked_board_widget = kwargs.get('board')
         if self.analysis_running.is_set():
             self.should_stop_analysis.set()
             while self.analysis_running.is_set():
                 await asyncio.sleep(0.1)  # microseconds to wait, you can adjust this as needed
             # asyncio.create_task(self.start_analysis_async())  # start the analysis
             await self.start_analysis_async()
+
     @asyncSlot()
     async def start_analysis_async(self):
         # print("Start analysis async")

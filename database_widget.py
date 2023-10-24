@@ -30,7 +30,7 @@ class GameListModel(QtCore.QAbstractListModel):
             except StopIteration:
                 break
 
-    def getPgnText(self, index):
+    def get_pgn(self, index):
         return self.games[index.row()]
 
     def rowCount(self, parent=None):
@@ -85,7 +85,7 @@ class DatabaseWidget(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(QModelIndex)
     def on_double_click(self, index):
-        pgn = self.game_list.model().getPgnText(index)
+        pgn = self.game_list.model().get_pgn(index)
         # print(pgn_text)
         self.hub.produce_event(Event.GameLoad, game=pgn)
 

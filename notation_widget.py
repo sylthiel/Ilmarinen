@@ -76,8 +76,8 @@ class NotationWidget(CustomWidget):
         if self.latest_node.parent is not None:
             print('Entered move back')
             self.current_move -= 1
-            print(f"self.latest_node is {self.latest_node}")
-            print(f"parent is {self.latest_node.parent}")
+            # print(f"self.latest_node is {self.latest_node}")
+            # print(f"parent is {self.latest_node.parent}")
             self.go_to_move(self.latest_node.parent)  # Update your chess board object to this move
             # self.latest_node = self.latest_node.parent
             self.update_pgn_display()
@@ -89,8 +89,8 @@ class NotationWidget(CustomWidget):
             node.uuid = str(uuid4())
             self.uuid_to_node[node.uuid] = node
             stack.extend(child for child in node.variations)
-        print("Finished traversing")
-        print(self.uuid_to_node)
+        # print("Finished traversing")
+        # print(self.uuid_to_node)
 
     def generate_html_pgn(self, node=None):
         if node is None:
@@ -115,7 +115,7 @@ class NotationWidget(CustomWidget):
 
             pgn_string += (f'<a href="#{str(main_variation.uuid)}" style="color:darkgray;text-decoration:none;outline: '
                            f'none">{pgn_move_string}</a>')
-            print(pgn_string)
+            # print(pgn_string)
             for i, variation in enumerate(node.variations[1:], start=1):
                 move_number = variation.ply()
                 move = variation.san()
@@ -140,7 +140,7 @@ class NotationWidget(CustomWidget):
         self.board.game_state.board.set_fen(node.board().fen())
         self.latest_node = node
         self.board.refresh_board()
-        self.board.hub.produce_event(Event.BoardChange)
+        self.board.hub.produce_event(Event.BoardChange, board=node.board())
 
     def move_forward(self):
         # Comparing with the total number of moves, which should be retrieved from your chess board object

@@ -84,6 +84,7 @@ class WidgetHub:
 
     def produce_event(self, event: Event, **kwargs):
         try:
+            print(f"Producing {event} with {kwargs}")
             if self.validator.validate_event(event, **kwargs):
                 for subscriber, function in self.subscribers[event]:
                     # print(f"Invoking {function} for subscriber {subscriber}")
