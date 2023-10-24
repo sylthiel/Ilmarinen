@@ -36,10 +36,17 @@ class MainWindow(QMainWindow):
             Event.GameLoaded: self.notation_widget.handle_game_loaded
         })
 
+        self.hub.register_listener(self, {
+            Event.GameLoad: self.switch_tab_on_load
+        })
+
         self.create_first_tab()
         self.create_second_tab()
 
         self.setCentralWidget(self.tabWidget)  # set QTabWidget as the central widget
+
+    def switch_tab_on_load(self, **kwargs):
+        self.tabWidget.setCurrentIndex(0)
 
     def create_first_tab(self):
         tab1 = QWidget()
