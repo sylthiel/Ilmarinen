@@ -1,7 +1,9 @@
 from uuid import uuid4
 
 import chess.pgn
-from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QTextBrowser
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QTextBrowser, QApplication, QLabel, QHBoxLayout
 
 from Ilmarinen.custom_widget import CustomWidget
 from Ilmarinen.widgethub import Event
@@ -13,6 +15,24 @@ class NotationWidget(CustomWidget):
         self.board = parent_board
         self.current_move = 0  # Keeps track of the current move number to show
         self.layout = QVBoxLayout(self)
+        self.headers_layout = QHBoxLayout()
+
+        self.white_label = QLabel()
+        self.black_label = QLabel()
+        self.event_label = QLabel()
+        self.site_label = QLabel()
+        self.date_label = QLabel()
+        self.result_label = QLabel()
+        self.headers_layout.addWidget(self.white_label)
+        self.headers_layout.addWidget(self.black_label)
+        self.headers_layout.addStretch()
+        self.headers_layout.addWidget(self.event_label)
+        self.headers_layout.addWidget(self.site_label)
+        self.headers_layout.addWidget(self.date_label)
+        self.headers_layout.addWidget(self.result_label)
+        self.layout.addLayout(self.headers_layout)
+
+
         self.board.set_child_notation(self)
         self.move_back_btn = QPushButton('<')
         self.move_forward_btn = QPushButton('>')
@@ -31,6 +51,16 @@ class NotationWidget(CustomWidget):
         self.uuid_to_node = {self.latest_node.uuid: self.latest_node}
         self.update_pgn_display()
 
+    def update_header_display(self):
+        headers = self.board.game_state.game.headers
+
+        # updating labels with header values or 'Unknown' if not provided
+        self.white_label.setText(headers.get('White', 'Unknown') + " - " + headers.get('Black', 'Unknown'))
+        self.event_label.setText(headers.get('Event', 'Unknown'))
+        self.site_label.setText(headers.get('Site', 'Unknown'))
+        self.date_label.setText(headers.get('Date', 'Unknown'))
+        self.result_label.setText(headers.get('Result', 'Unknown'))
+
     def link_clicked(self, url):
         node_uuid = url.toString()[1:]  # Remove the '#' in the URL
         node = self.uuid_to_node.get(node_uuid)
@@ -39,6 +69,7 @@ class NotationWidget(CustomWidget):
         if node:
             self.go_to_move(node)
 
+
     def handle_game_loaded(self):
         self.latest_node = self.board.game_state.game
         self.latest_node.uuid = uuid4()
@@ -46,6 +77,7 @@ class NotationWidget(CustomWidget):
         self.uuid_to_node = {}
         self.traverse_and_generate_uuid()
         self.update_pgn_display()
+        self.update_header_display()
 
     def get_pgn(self):
         return str(self.board.game_state.game)
@@ -66,7 +98,7 @@ class NotationWidget(CustomWidget):
             self.latest_node = new_node
         self.update_pgn_display()
         self.board.hub.produce_event(Event.BoardMove, move=kwargs.get("move"))
-        self.board.hub.produce_event(Event.BoardChange)
+        self.board.hub.produce_event(Event.BoardChange, board=self.latest_node.board())
 
     def update_pgn_display(self):
         # pgn = self.get_pgn()  # Get the PGN from your chess board object
