@@ -13,47 +13,10 @@ class Event(Enum):
     BoardCreated = "BoardCreated"
     GameLoad = "GameLoad"
     GameLoaded = "GameLoaded"
+    GameTraversal = "GameTraversal"
+    DatabaseSearch = "DatabaseSearch"
+    DatabaseSearchCompleted = "DatabaseSearchCompleted"
     # replace Event logic due to switching to aenum.Enum allowing extend_enum()
-
-
-class EventValidator:
-    def __init__(self):
-        # placeholder values
-        from Ilmarinen.chess_board_widget import Chessboard
-        self.validations = {
-            Event.GameMove:
-                {'move': chess.Move},
-            Event.BoardChange:
-                {'board': chess.Board},
-            Event.BoardCreated:
-                {'board': Chessboard},
-            Event.BoardMove:
-                 {'move': chess.Move},
-            Event.GameLoad:
-                {'game': chess.pgn.Game},
-            Event.GameLoaded:
-                {}
-        }
-
-    def validate_event(self, event: Event, **kwargs):
-        if event not in self.validations:
-            raise ValueError('Unknown event')
-
-        # Get the expected validations for the event
-        expected = self.validations[event]
-
-        # Check each provided argument against the expected validations
-        for arg_name, arg_val in kwargs.items():
-            if arg_name not in expected:
-                raise ValueError('Unexpected argument: ' + arg_name)
-
-            expected_type = expected[arg_name]
-
-            if not isinstance(arg_val, expected_type):
-                raise ValueError('Argument {0} is of type {1}, expected {2}'.format(
-                    arg_name, type(arg_val).__name__, expected_type.__name__))
-
-        return True
 
 
 class WidgetHub:
@@ -66,7 +29,9 @@ class WidgetHub:
         self.uuid = str(uuid4())
         self.event_types = []
         self.subscribers = {event: [] for event in Event}
-        self.validator = EventValidator()
+
+    def listener_exists(self, event: Event):
+        return len(self.subscribers[event])
 
     def register_listener(self, listener, function_association: dict[Event, Callable]):
         """
@@ -80,14 +45,29 @@ class WidgetHub:
                     self.subscribers[function].append((listener, function_association[function]))
             else:
                 raise ValueError(f"Function {function} is not an event type registered with this hub."
-                                 f"\nRegistered events: {[x for x in Event]}")
+                                 f"\nRegistered events: {[x for x in self.subscribers]}")
 
-    def produce_event(self, event: Event, **kwargs):
+    async def produce_event_async(self, event: Event, **kwargs):
         try:
             print(f"Producing {event} with {kwargs}")
-            if self.validator.validate_event(event, **kwargs):
-                for subscriber, function in self.subscribers[event]:
-                    # print(f"Invoking {function} for subscriber {subscriber}")
-                    function(**kwargs)
+            for subscriber, function in self.subscribers[event]:
+                # print(f"Invoking {function} for subscriber {subscriber}")
+                await function(**kwargs)
         except Exception as e:
-            print(f'Produce event failed with {str(e)}')
+            print(f'Produce {event} event failed with {str(e)}')
+
+    def produce_event(self, event: Event, **kwargs):
+        # print(f"Current listeners:")
+        # print(f"Registered events: {[x for x in self.subscribers]}")
+        # for event_type in self.subscribers:
+        #     print(f"Event type: {event_type}")
+        #     for listener, function in self.subscribers[event_type]:
+        #         print(f"Listener {listener} subscribed with function {function}")
+        # print(self.subscribers)
+        try:
+            print(f"Producing {event} with {kwargs}")
+            for subscriber, function in self.subscribers[event]:
+                # print(f"Invoking {function} for subscriber {subscriber}")
+                function(**kwargs)
+        except Exception as e:
+            print(f'Produce {event} event failed with {str(e)}')

@@ -22,9 +22,7 @@ class MainWindow(QMainWindow):
             Event.BoardCreated: self.chess_engine.board_created_event
         })
         self.chess_board = ChessBoardWithControls(self.hub)
-
-
-        self.notation_widget = NotationWidget(self.chess_board.chessboard)
+        self.notation_widget = NotationWidget(self.chess_board.chessboard, self.hub)
 
         self.hub.register_listener(self.chess_board.chessboard,{
             Event.BoardChange: self.chess_board.chessboard.refresh_board,
@@ -55,7 +53,6 @@ class MainWindow(QMainWindow):
         layout1.setRowStretch(0, 2)
         layout1.addWidget(self.chess_engine, 1, 0, 1, 1)
         layout1.setRowStretch(1, 1)
-        self.chess_board.chessboard.set_child_notation(self.notation_widget)
         layout1.addWidget(self.notation_widget, 0, 1)
         self.tabWidget.addTab(tab1, "First Tab")
 

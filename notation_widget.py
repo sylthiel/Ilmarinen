@@ -5,14 +5,16 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QTextBrowser, QApplication, QLabel, QHBoxLayout
 
+import Ilmarinen.widgethub
 from Ilmarinen.custom_widget import CustomWidget
 from Ilmarinen.widgethub import Event
 
 
 class NotationWidget(CustomWidget):
-    def __init__(self, parent_board):
+    def __init__(self, parent_board, hub: Ilmarinen.widgethub.WidgetHub):
         super().__init__()
         self.board = parent_board
+        self.hub = hub
         self.current_move = 0  # Keeps track of the current move number to show
         self.layout = QVBoxLayout(self)
         self.headers_layout = QHBoxLayout()
@@ -32,8 +34,6 @@ class NotationWidget(CustomWidget):
         self.headers_layout.addWidget(self.result_label)
         self.layout.addLayout(self.headers_layout)
 
-
-        self.board.set_child_notation(self)
         self.move_back_btn = QPushButton('<')
         self.move_forward_btn = QPushButton('>')
         self.latest_node = self.board.game_state.game
@@ -97,8 +97,8 @@ class NotationWidget(CustomWidget):
             self.uuid_to_node[new_node.uuid] = new_node
             self.latest_node = new_node
         self.update_pgn_display()
-        self.board.hub.produce_event(Event.BoardMove, move=kwargs.get("move"))
-        self.board.hub.produce_event(Event.BoardChange, board=self.latest_node.board())
+        self.hub.produce_event(Event.BoardMove, move=kwargs.get("move"))
+        self.hub.produce_event(Event.BoardChange, board=self.latest_node.board())
 
     def update_pgn_display(self):
         # pgn = self.get_pgn()  # Get the PGN from your chess board object
@@ -169,10 +169,10 @@ class NotationWidget(CustomWidget):
     def go_to_move(self, node):
         print(f'Go to move requested to {node}, FEN:')
         print(node.board().fen())
-        self.board.game_state.board.set_fen(node.board().fen())
         self.latest_node = node
-        self.board.refresh_board()
-        self.board.hub.produce_event(Event.BoardChange, board=node.board())
+        self.board.game_state.board.set_fen(node.board().fen())
+        self.hub.produce_event(Event.GameTraversal, board=self.latest_node.board())
+        self.hub.produce_event(Event.BoardChange, board=self.latest_node.board())
 
     def move_forward(self):
         # Comparing with the total number of moves, which should be retrieved from your chess board object

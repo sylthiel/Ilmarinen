@@ -1,10 +1,19 @@
+import os
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 import asyncio
 
+import Ilmarinen.widgethub
+from Ilmarinen.widgethub import Event
+
 
 class OpenChessGameDatabase:
-    def __init__(self):
-        self.databases = {}
+    def __init__(self, hub):
+        self.databases = {}  # probably add save state so that it remembers converted databases?
+        self.hub = hub
+        self.hub.register_listener(self, {
+            Event.DatabaseSearch: self.handle_search_request
+        })
 
     @staticmethod
     def create_cli_args(executable: str, command: Optional[str] = None, *args, **kwargs):
@@ -65,6 +74,9 @@ class OpenChessGameDatabase:
         )
 
         stdout, stderr = await process.communicate()
+        if stderr == b'':
+            for database in pgn_files:
+                self.databases[database] = file_name
         return stdout, stderr, process.returncode
 
     def merge(self, pgn_files: List[str], options: Dict[str, Any] = None):
@@ -82,6 +94,30 @@ class OpenChessGameDatabase:
     def get_game(self, game_id: int):
         pass
 
+    async def handle_search_request(self, fen: str, db: str, destination: str = '',
+                                    asynchronous=True, return_pgn_object=False):
+        if db not in self.databases:
+            await self.create([db], ''.join(db.split('.')[:-1]), {
+                'cpu': 4,
+                'o': 'moves2'
+            })
+        if not destination:
+            destination = os.path.join(os.getcwd(), 'resources', 'searchdumps',
+                                       datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + '-ocgdbsearch.pgn')
+        target_db = self.databases.get(db)
+        if asynchronous:
+            out, err, code = await self.execute_query_async(fen=fen, db=target_db, destination=destination)
+            if err != b'':
+                print(f"Search unsuccessful")
+                print(err)
+                return
+            if return_pgn_object:
+                raise NotImplemented
+            else:
+                self.hub.produce_event(Event.DatabaseSearchCompleted, file_name=destination)
+        else:
+            raise NotImplemented
+
     async def execute_query_async(self, fen: Optional[str], db: str, destination: str = 'ocgdb_query_dump.pgn'):
         # obviously placeholder
         arguments = OpenChessGameDatabase.create_cli_args('ocgdb',
@@ -91,7 +127,7 @@ class OpenChessGameDatabase:
                                                               'q': f"fen[{fen}]",
                                                               'r': destination
                                                           })
-        print(' '.join(arguments))
+        # print(' '.join(arguments))
         process = await asyncio.create_subprocess_exec(
             *arguments,
             stdout=asyncio.subprocess.PIPE,
@@ -140,22 +176,21 @@ class Query:
         pass
 
 
-async def main():
-    h = OpenChessGameDatabase()
+async def db():
+    hub = Ilmarinen.widgethub.WidgetHub()
+    h = OpenChessGameDatabase(hub)
     out, err, code = await h.create(pgn_files=['nepo.pgn'],
                                     file_name='nepo2.ocgdb.db3',
                                     options={
                                         'cpu': 4,
                                         'o': 'moves2'
                                     })
-    print(out)
-    print(err)
-    print(code)
-
+    assert err == b''
     sicilian_defense = 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2'
     out, err, code = await h.execute_query_async(sicilian_defense, 'nepo.ocgdb.db3')
-    print (out, err, code)
+    assert err == b''
     # printing or processing result here
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(db())
