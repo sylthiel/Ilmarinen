@@ -21,14 +21,18 @@ class SearchWindowChessboardInfo:
         self.free_mode = False
 
     def move_piece(self, start_square: str, end_square: str):
+        print(f'here')
         if not self.free_mode:
             try:
                 move = chess.Move.from_uci(start_square + end_square)
+                print(f"Search window chessboard -- generated move {move}")
             except chess.InvalidMoveError:
                 return False
             if move in self.board.legal_moves:
                 try:
+                    print(f"Board before move:\n{self.board}")
                     self.board.push(move)
+                    print(f"Board after move: \n {self.board}")
                 except Exception as e:
                     print(e)
                 return True
@@ -57,17 +61,16 @@ class SearchWindowChessboard(Ilmarinen.chess_board_widget.Chessboard):
 class SearchWindow(Ilmarinen.chess_board_widget.ChessBoardWithControls):
     def __init__(self, hub):
         super().__init__(hub=hub)
-        self.chessboard = SearchWindowChessboard(hub=self.hub)
+        # self.chessboard = self.create_chessboard()
         self.empty_board_button = QPushButton("Empty board")
         self.empty_board_button.clicked.connect(self.chessboard.empty_board)
         self.layout.addWidget(self.empty_board_button, 1, 2, 1, 1)
         self.free_mode_button = QPushButton("Board setup mode")
         self.free_mode_button.clicked.connect(self.chessboard.change_free_mode)
+        self.layout.addWidget(self.free_mode_button, 1, 3, 1, 1)
 
-
-
-
-
+    def create_chessboard(self):
+        return SearchWindowChessboard(hub=self.hub)
 
 class GameListModel(QtCore.QAbstractListModel):
     def __init__(self, db_name: Optional[str]):
@@ -137,27 +140,25 @@ class SearchDialog(QtWidgets.QDialog):
         self.setWindowTitle("Search")
         self.parent = parent
         self.layout = QtWidgets.QVBoxLayout(self)
-
-        self.chessboard = SearchWindowChessboard(hub)
+        self.search_form = SearchWindow(hub)
+        self.chessboard = self.search_form.chessboard
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
 
-        # Connect the OK and Cancel buttons to the appropriate slots (you can create custom functions here if needed)
         self.button_box.accepted.connect(self._accept)
         self.button_box.rejected.connect(self.reject)
 
-        self.layout.addWidget(self.chessboard)
+        self.layout.addWidget(self.search_form)
         self.layout.addWidget(self.button_box)
 
-    # Uncomment this if you want to get results when OK is pressed
     def _accept(self):
         print(f"Entered _accept")
         print()
         asyncio.get_event_loop().create_task(self.accept())
 
     async def accept(self):
-        # You may want to override this to do something with your chessboard component when OK is clicked
+        print(self.search_form.chessboard)
         await self.parent.search_database_async(self.chessboard.game_state.board.fen())
         super().accept()
 
@@ -215,15 +216,12 @@ class DatabaseWidget(QtWidgets.QWidget):
             self.search_dialog = SearchDialog(self, self.hub)
             self.search_dialog.show()
         else:
-            print('No need to create search dialog')
             self.search_dialog.chessboard.reset_board()
-            print('board is')
             print(f'{self.search_dialog.chessboard.game_state.board}')
             self.search_dialog.show()
 
 
     def open_db(self, file=None):
-        print(f"Entered opendb with {file}")
         if file is None:
             file_dialog = QFileDialog(self)
             file, _ = file_dialog.getOpenFileName(self, "QFileDialog.getOpenFileName()", "",
@@ -231,7 +229,6 @@ class DatabaseWidget(QtWidgets.QWidget):
         if file:
             self.current_db = file
             self.search_button.setEnabled(True)
-            # print(f"DB is set to {self.current_db}")
             self.init_game_list(file)
 
     def init_game_list(self, db: str):

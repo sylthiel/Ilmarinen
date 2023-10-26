@@ -96,6 +96,9 @@ class OpenChessGameDatabase:
 
     async def handle_search_request(self, fen: str, db: str, destination: str = '',
                                     asynchronous=True, return_pgn_object=False):
+
+        # possibly implement fen pruning:
+        # fen[rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR] (cut out castling and move numbers)
         if db not in self.databases:
             await self.create([db], ''.join(db.split('.')[:-1]), {
                 'cpu': 4,
@@ -127,12 +130,14 @@ class OpenChessGameDatabase:
                                                               'q': f"fen[{fen}]",
                                                               'r': destination
                                                           })
-        # print(' '.join(arguments))
+        print(' '.join(arguments))
         process = await asyncio.create_subprocess_exec(
             *arguments,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
+        # ocgdb -cpu 4 -db nepo.ocgdb.db3 -q fen[rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2] -r ocgdb_query_dump.pgn works
+        # ocgdb -cpu 4 -db /Users/aemerzel/PycharmProjects/Ilmarinen-actual/Ilmarinen/nepo -q fen[rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1] -r /Users/aemerzel/PycharmProjects/Ilmarinen-actual/Ilmarinen/resources/searchdumps/2023-10-26-21-00-41-ocgdbsearch.pgn
 
         stdout, stderr = await process.communicate()
         return stdout, stderr, process.returncode

@@ -4,7 +4,7 @@ import chess
 import chess.engine
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QLabel, QMessageBox, QInputDialog, QFileDialog, \
-    QGridLayout
+    QGridLayout, QSizePolicy
 from qasync import asyncSlot
 
 from Ilmarinen.chess_board_widget import ChessBoardWithControls
@@ -14,6 +14,7 @@ from Ilmarinen.custom_widget import CustomWidget
 class ChessEngineWidget(CustomWidget):
     def __init__(self, main_window, hub):
         super().__init__()
+        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self.hub = hub
         self.main_window = main_window
         self.analysis_running = False
@@ -132,7 +133,7 @@ class ChessEngineWidget(CustomWidget):
     def board_created_event(self, **kwargs):
         print(f'Entered board_created_event with {kwargs}')
         self.linked_board_widget = kwargs.get('board').game_state.board
-        self.link_board_button.setText("Linked to Board " + kwargs.get('board').parent.uuid)
+        self.link_board_button.setText("Linked to Board " + kwargs.get('board').uuid)
 
     def parse_info(self, info):
         try:

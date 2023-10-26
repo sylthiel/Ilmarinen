@@ -1,6 +1,7 @@
 import asyncio
 
-from PyQt6.QtWidgets import QWidget, QGridLayout, QApplication, QTabWidget, QMainWindow
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QWidget, QGridLayout, QApplication, QTabWidget, QMainWindow, QSplitter, QTextEdit
 from qasync import QEventLoop
 
 from Ilmarinen.chess_board_widget import ChessBoardWithControls
@@ -23,7 +24,7 @@ class MainWindow(QMainWindow):
         })
         self.chess_board = ChessBoardWithControls(self.hub)
         self.notation_widget = NotationWidget(self.chess_board.chessboard, self.hub)
-
+        self.chess_board.board_registration()
         self.hub.register_listener(self.chess_board.chessboard,{
             Event.BoardChange: self.chess_board.chessboard.refresh_board,
             Event.GameLoad: self.chess_board.chessboard.handle_game_load
@@ -49,11 +50,17 @@ class MainWindow(QMainWindow):
     def create_first_tab(self):
         tab1 = QWidget()
         layout1 = QGridLayout(tab1)
-        layout1.addWidget(self.chess_board, 0, 0)
-        layout1.setRowStretch(0, 2)
-        layout1.addWidget(self.chess_engine, 1, 0, 1, 1)
-        layout1.setRowStretch(1, 1)
-        layout1.addWidget(self.notation_widget, 0, 1)
+
+        splitter_vertical = QSplitter(Qt.Orientation.Vertical)
+        splitter_vertical.addWidget(self.chess_board)
+        splitter_vertical.addWidget(self.chess_engine)
+
+        splitter_horizontal = QSplitter(Qt.Orientation.Horizontal)
+        splitter_horizontal.addWidget(splitter_vertical)
+        splitter_horizontal.addWidget(self.notation_widget)
+
+        layout1.addWidget(splitter_horizontal, 0, 0)
+
         self.tabWidget.addTab(tab1, "First Tab")
 
     def create_second_tab(self):
@@ -67,8 +74,9 @@ class MainWindow(QMainWindow):
 if __name__ == '__main__':
     app = QApplication([])
     mainWindow = MainWindow()
-    mainWindow.resize(1000, 1000)
+    mainWindow.resize(1280, 800)
     mainWindow.show()
+
     # async magic that fixes the backend process stopping UI interaction
     loop = QEventLoop(app)
     asyncio.set_event_loop(loop)
