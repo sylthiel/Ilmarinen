@@ -2,7 +2,7 @@ import asyncio
 
 import chess
 import chess.engine
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, QSizeF, QSize
 from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QLabel, QMessageBox, QInputDialog, QFileDialog, \
     QGridLayout, QSizePolicy
 from qasync import asyncSlot
@@ -11,40 +11,39 @@ from Ilmarinen.chess_board_widget import ChessBoardWithControls
 from Ilmarinen.custom_widget import CustomWidget
 
 
+class CustomTextEdit(QTextEdit):
+    def sizeHint(self):
+        return QSize(30, 100)
+
 class ChessEngineWidget(CustomWidget):
     def __init__(self, main_window, hub):
         super().__init__()
-        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
         self.hub = hub
         self.main_window = main_window
         self.analysis_running = False
         # Create a QVBoxLayout instance
         self.layout = QGridLayout(self)
-        self.link_board_button = QPushButton('Link board')
-        self.link_board_button.clicked.connect(self.link_board)
         # Create QPushButton for browsing file
-        self.browse_button = QPushButton('Browse UCI engine...')
+        self.browse_button = QPushButton('Browse')
         self.browse_button.clicked.connect(self.browse_file)
         self.best_moves_text = QTextEdit()
-        self.analysis_text = QTextEdit()
+        self.analysis_text = QLabel()
         # Create QPushButton for adding more best lines
-        self.add_line_button = QPushButton("More lines", self)
+        self.add_line_button = QPushButton("+", self)
         self.add_line_button.clicked.connect(self.add_line)
         self.num_lines = 1
         # Create QPushButton for removing best lines
-        self.remove_line_button = QPushButton("Less lines", self)
+        self.remove_line_button = QPushButton("-", self)
         self.remove_line_button.clicked.connect(self.remove_line)
         # Create QLabel for showing the selected file
         self.file_label = QLabel('No file selected.')
-        self.analysis_update_timer = QTimer()
-        self.analysis_update_timer.timeout.connect(self.update_results)
         # Create QPushButton for starting analysis
-        self.analysis_button = QPushButton('Start analysis')
+        self.analysis_button = QPushButton('Start')
         self.analysis_button.clicked.connect(self.toggle_analysis)
         self.engine = None
         self.analysis_result = None
         # Create QTextEdit for showing the analysis results
-        self.results_text = QTextEdit()
         self.should_stop_analysis = asyncio.Event()
         self.analysis_running = asyncio.Event()
         # Add all widgets to the layout
@@ -52,13 +51,12 @@ class ChessEngineWidget(CustomWidget):
         # self.layout.addWidget(self.file_label)
         self.layout.addWidget(self.analysis_button, 0, 1)
         # self.layout.addWidget(self.results_text, 1, 0)
-        self.layout.addWidget(self.link_board_button, 0, 2)
-        self.layout.addWidget(self.analysis_text, 2, 0, 1, 5)
+        self.layout.addWidget(self.analysis_text, 2, 0, 1, 1)
         self.layout.addWidget(self.best_moves_text, 3, 0, 1, 5)
         self.layout.addWidget(self.add_line_button, 0, 3)
         self.layout.addWidget(self.remove_line_button, 0, 4)
-        self.layout.setRowStretch(0, 1)
-        self.layout.setRowStretch(1, 5)
+        # self.layout.setRowStretch(0, 1)
+        # self.layout.setRowStretch(1, 5)
         # self.layout.setRowStretch(2, 5)
 
         # Set layout
@@ -133,7 +131,7 @@ class ChessEngineWidget(CustomWidget):
     def board_created_event(self, **kwargs):
         print(f'Entered board_created_event with {kwargs}')
         self.linked_board_widget = kwargs.get('board').game_state.board
-        self.link_board_button.setText("Linked to Board " + kwargs.get('board').uuid)
+        # self.link_board_button.setText("Linked to Board " + kwargs.get('board').uuid)
 
     def parse_info(self, info):
         try:
@@ -186,7 +184,7 @@ class ChessEngineWidget(CustomWidget):
 
     def analysis_finished(self):
         # self.results_text.append("\nAnalysis finished!")
-        self.analysis_button.setText('Start analysis')
+        self.analysis_button.setText('Start')
 
     def add_line(self):
         self.num_lines += 1
@@ -219,7 +217,7 @@ class ChessEngineWidget(CustomWidget):
             linked_board_widget = self.get_main_window().widgetDict[ChessBoardWithControls].get(item_uuid)
             if linked_board_widget:
                 self.linked_board_widget = linked_board_widget.chessboard
-                self.link_board_button.setText("Linked to Board " + str(items))
+                # self.link_board_button.setText("Linked to Board " + str(items))
             else:
                 QMessageBox.critical(self, "Error",
                                      "Failed to link the selected board",

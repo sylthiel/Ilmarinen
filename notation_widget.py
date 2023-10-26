@@ -3,7 +3,8 @@ from uuid import uuid4
 import chess.pgn
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeyEvent
-from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QTextBrowser, QApplication, QLabel, QHBoxLayout
+from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QTextBrowser, QApplication, QLabel, QHBoxLayout, \
+    QSizePolicy
 
 import Ilmarinen.widgethub
 from Ilmarinen.custom_widget import CustomWidget
@@ -18,7 +19,7 @@ class NotationWidget(CustomWidget):
         self.current_move = 0  # Keeps track of the current move number to show
         self.layout = QVBoxLayout(self)
         self.headers_layout = QHBoxLayout()
-
+        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
         self.white_label = QLabel()
         self.black_label = QLabel()
         self.event_label = QLabel()
@@ -43,8 +44,8 @@ class NotationWidget(CustomWidget):
         self.pgn_display.setOpenExternalLinks(False)  # Prevent opening in a web browser
         self.pgn_display.anchorClicked.connect(self.link_clicked)
         self.layout.addWidget(self.pgn_display)
-        self.layout.addWidget(self.move_back_btn)
-        self.layout.addWidget(self.move_forward_btn)
+        # self.layout.addWidget(self.move_back_btn)
+        # self.layout.addWidget(self.move_forward_btn)
 
         self.move_back_btn.clicked.connect(self.move_back)
         self.move_forward_btn.clicked.connect(self.move_forward)

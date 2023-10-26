@@ -11,6 +11,8 @@ from Ilmarinen.notation_widget import NotationWidget
 from Ilmarinen.widgethub import WidgetHub, Event
 
 
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -50,16 +52,19 @@ class MainWindow(QMainWindow):
     def create_first_tab(self):
         tab1 = QWidget()
         layout1 = QGridLayout(tab1)
+        layout1.setContentsMargins(0, 0, 0, 0)  # Add this line
+        layout1.setSpacing(0)
+        # The splitter between NotationWidget and ChessEngineWidget.
+        splitter_notation_engine = QSplitter(Qt.Orientation.Vertical)
+        splitter_notation_engine.addWidget(self.notation_widget)
+        splitter_notation_engine.addWidget(self.chess_engine)
 
-        splitter_vertical = QSplitter(Qt.Orientation.Vertical)
-        splitter_vertical.addWidget(self.chess_board)
-        splitter_vertical.addWidget(self.chess_engine)
+        # The main splitter between the ChessBoardWithControls and the other widgets
+        splitter_main = QSplitter(Qt.Orientation.Horizontal)
+        splitter_main.addWidget(self.chess_board)
+        splitter_main.addWidget(splitter_notation_engine)
 
-        splitter_horizontal = QSplitter(Qt.Orientation.Horizontal)
-        splitter_horizontal.addWidget(splitter_vertical)
-        splitter_horizontal.addWidget(self.notation_widget)
-
-        layout1.addWidget(splitter_horizontal, 0, 0)
+        layout1.addWidget(splitter_main, 0, 0)
 
         self.tabWidget.addTab(tab1, "First Tab")
 

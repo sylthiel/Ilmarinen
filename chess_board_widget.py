@@ -119,7 +119,7 @@ class Chessboard(QGraphicsView):
         self.squares = [[None for _ in range(8)] for _ in range(8)]
         self.pieces = [[None for _ in range(8)] for _ in range(8)]
         self.draw_board()
-        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
 
     def refresh_board(self, **kwargs):
         # **kwargs is needed because this method is designed to subscribe to certain events, some of which
@@ -303,10 +303,20 @@ class ChessBoardWithControls(QWidget):
         self.layout.addWidget(board, 0, 0, 1, 2)
 
     def init_buttons(self):
-        self.reset_button = QPushButton("Reset board")
+        img_path = os.path.join(os.getcwd(), 'resources', 'chessboard', 'buttons')
+
+        self.reset_button = QPushButton()
+        self.reset_button.setIcon(QIcon(os.path.join(img_path, 'reset.png')))
+        self.reset_button.setIconSize(QSize(32, 32))  # Adjust this size if needed.
+        self.reset_button.setFixedSize(QSize(32, 32))  # Adjust this size if needed.
         self.reset_button.clicked.connect(self.chessboard.reset_board)
-        self.flip_button = QPushButton("Flip board")
+
+        self.flip_button = QPushButton()
+        self.flip_button.setIcon(QIcon(os.path.join(img_path, 'flip.png')))
+        self.flip_button.setIconSize(QSize(32, 32))  # Adjust this size if needed.
+        self.flip_button.setFixedSize(QSize(32, 32))  # Adjust this size if needed.
         self.flip_button.clicked.connect(self.chessboard.flip_board)
+
         self.layout.addWidget(self.reset_button, 1, 0, 1, 1)
         self.layout.addWidget(self.flip_button, 1, 1, 1, 1)
 
