@@ -1,14 +1,16 @@
 import asyncio
 import os
+import pickle
 from typing import Optional
-
+from collections import deque
 from PyQt6 import QtWidgets, QtGui, QtCore
 import sys
 import chess.pgn
 from PyQt6.QtCore import QModelIndex, QSize
 from PyQt6.QtGui import QIcon
 from qasync import QEventLoop
-from PyQt6.QtWidgets import QFileDialog, QDialogButtonBox, QPushButton, QVBoxLayout, QHBoxLayout, QGraphicsPixmapItem
+from PyQt6.QtWidgets import QFileDialog, QDialogButtonBox, QPushButton, QVBoxLayout, QHBoxLayout, QGraphicsPixmapItem, \
+    QCheckBox, QGridLayout, QLabel, QLineEdit, QComboBox
 import PyQt6
 import Ilmarinen.chess_board_widget
 from Ilmarinen.pyocgdb import OpenChessGameDatabase
@@ -77,14 +79,19 @@ class SearchWindowChessboard(Ilmarinen.chess_board_widget.Chessboard):
                     print(f"picked up piece {square}")
                     self.selected_from_board = True
                     self.selected_piece = piece
+                    self.selected_square = square
             else:
                 print("I'm in else")
                 print(chess.parse_square(square.square_name))
                 self.game_state.board.set_piece_at(chess.parse_square(square.square_name), self.selected_piece)
-                self.refresh_board()
                 if self.selected_from_board:
                     self.selected_from_board = False
                     self.selected_piece = None
+                    if self.selected_square is not None:
+                        print(f'I should delete {self.selected_square.square_name}')
+                        self.game_state.board.set_piece_at(chess.parse_square(self.selected_square.square_name),
+                                                           None)
+                self.refresh_board()
 
         # super().mousePressEvent(event)
 
@@ -101,6 +108,62 @@ class SearchWindow(Ilmarinen.chess_board_widget.ChessBoardWithControls):
         self.empty_board_button.setFixedSize(QSize(32, 32))  # Adjust this size if needed.
         self.button_layout.addWidget(self.empty_board_button)
         self.add_ribbons()
+        self.add_configuration_controls()
+
+    def add_configuration_controls(self):
+        self.configs_layout = QGridLayout()
+        self.configs_layout.setContentsMargins(1,1,1,1)
+        self.configs_layout.setSpacing(0)
+        # Configure Whose Move
+        self.move_label = QLabel("Player Move")
+        self.move_combobox = QComboBox()
+        self.move_combobox.addItems(["White", "Black"])
+        self.configs_layout.addWidget(self.move_label, 0, 0)
+        self.configs_layout.addWidget(self.move_combobox, 0, 1)
+
+        # Configure Turn Number
+        self.turn_label = QLabel("Turn Number")
+        self.turn_input = QLineEdit()
+        self.configs_layout.addWidget(self.turn_label, 1, 0)
+        self.configs_layout.addWidget(self.turn_input, 1, 1)
+
+        self.castles_layout = QGridLayout()
+        self.castle_WK = QCheckBox("White King-side")
+        self.castle_WQ = QCheckBox("White Queen-Side")
+        self.castle_BK = QCheckBox("Black King-side")
+        self.castle_BQ = QCheckBox("Black Queen-Side")
+        self.ignore_castling = QCheckBox("Ignore castling")
+        self.castles_layout.addWidget(self.castle_WK, 1, 0)
+        self.castles_layout.addWidget(self.castle_WQ, 1, 1)
+        self.castles_layout.addWidget(self.castle_BK, 2, 0)
+        self.castles_layout.addWidget(self.castle_BQ, 2, 1)
+        # self.castles_layout.addWidget(self.ignore_castling) -- doesn't actually work. FEN requires castling
+        self.castles_label = QLabel("Castling Rights")
+
+        self.configs_layout.addWidget(self.castles_label, 3, 0)
+        self.configs_layout.addLayout(self.castles_layout,3, 1)
+
+        self.layout.addLayout(self.configs_layout, 0, 2)
+
+    def get_fen_additional_parameters(self):
+        fen_param_string = " "
+        fen_param_string += 'w ' if self.move_combobox.currentText() == 'White' else 'b '
+        fen_param_string += 'K' if self.castle_WK.isChecked() else ""
+        fen_param_string += 'Q' if self.castle_WQ.isChecked() else ""
+        fen_param_string += 'k' if self.castle_BK.isChecked() else ""
+        fen_param_string += 'q' if self.castle_BQ.isChecked() else ""
+        if len(fen_param_string) == 2:
+            fen_param_string += '-'
+        fen_param_string += ' - 0' #  I need if ocgdb treats the en-passant square as mandatory for position search
+        try:
+            turn = int(self.turn_input.text())
+            if turn > 0:
+                fen_param_string += f' {turn}'
+        except ValueError:
+            pass
+        print('Fen params')
+        print(fen_param_string)
+        return fen_param_string
 
     def add_ribbons(self):
         self.piece_ribbon_white = Ilmarinen.chess_board_widget.PieceRibbon(color="white", display_pieces=['K', 'Q', 'R', 'B', 'N', 'P'],
@@ -124,6 +187,7 @@ class SearchWindow(Ilmarinen.chess_board_widget.ChessBoardWithControls):
         self.chessboard.selected_from_board = False
     def create_chessboard(self):
         return SearchWindowChessboard(hub=self.hub)
+
 
 class GameListModel(QtCore.QAbstractListModel):
     def __init__(self, db_name: Optional[str]):
@@ -212,7 +276,10 @@ class SearchDialog(QtWidgets.QDialog):
 
     async def accept(self):
         print(self.search_form.chessboard)
-        await self.parent.search_database_async(self.chessboard.game_state.board.fen())
+        fen_string = (self.chessboard.game_state.board.fen().split(' ')[0] +
+                      self.search_form.get_fen_additional_parameters())
+
+        await self.parent.search_database_async(fen_string)
         super().accept()
 
 
@@ -229,6 +296,10 @@ class DatabaseWidget(QtWidgets.QWidget):
         self.db_backend = OpenChessGameDatabase(hub)
         self.search_dialog = None
 
+        self.database_history = deque()
+        self.history_index = -1
+
+
     def init_ui(self):
         self.setWindowTitle("Chess Database")
         self.resize(800, 600)
@@ -238,6 +309,12 @@ class DatabaseWidget(QtWidgets.QWidget):
         self.search_button.setDisabled(True)
         new_game_button = QtWidgets.QPushButton("New game")
         open_db_button = QtWidgets.QPushButton("Open database")
+        self.db_forward_button = QPushButton('->')
+        self.db_back_button = QPushButton('<-')
+        self.db_forward_button.clicked.connect(self.go_to_next_db)
+        self.db_back_button.clicked.connect(self.go_to_previous_db)
+        self.buttons_row.addWidget(self.db_back_button)
+        self.buttons_row.addWidget(self.db_forward_button)
         self.buttons_row.addWidget(self.search_button)
         self.buttons_row.addWidget(new_game_button)
         self.buttons_row.addWidget(open_db_button)
@@ -261,7 +338,10 @@ class DatabaseWidget(QtWidgets.QWidget):
                                     asynchronous=True, return_pgn_object=False
         '''
         print(f"Search requested with fen\n {fen}")
-        status_check = chess.Board(fen).status()
+
+        temp_board = chess.Board(fen)
+        status_check = temp_board.status()
+
         if status_check == chess.STATUS_VALID:
             await self.hub.produce_event_async(Event.DatabaseSearch, fen=fen, db=self.current_db, asynchronous=True)
         else:
@@ -279,16 +359,45 @@ class DatabaseWidget(QtWidgets.QWidget):
             print(f'{self.search_dialog.chessboard.game_state.board}')
             self.search_dialog.show()
 
-
-    def open_db(self, file=None):
+    def open_db(self, file=None, no_history=False):
         if file is None:
             file_dialog = QFileDialog(self)
             file, _ = file_dialog.getOpenFileName(self, "QFileDialog.getOpenFileName()", "",
                                                   "All Files (*);;Chess PGN Files (*.pgn)")
         if file:
+            if not no_history:
+                self.database_history.append(file)
+                self.history_index = len(self.database_history) - 1
             self.current_db = file
             self.search_button.setEnabled(True)
             self.init_game_list(file)
+            self.save_database_history()
+
+    def save_database_history(self):
+        with open('database_history.pickle', 'wb') as f:
+            pickle.dump(list(self.database_history), f)
+
+    def load_database_history(self):
+        if os.path.isfile('database_history.pickle'):
+            with open('database_history.pickle', 'rb') as f:
+                self.database_history = deque(pickle.load(f))
+            if self.database_history:  # Check if deque is not empty
+                self.open_db(self.database_history[-1])
+
+    def go_to_previous_db(self):
+        if self.history_index > 0:
+            self.history_index -= 1
+            previous_db = self.database_history[self.history_index]
+            print(f"Going to {previous_db}")
+            self.open_db(previous_db, no_history=True)
+
+    def go_to_next_db(self):
+        print(self.database_history)
+        if self.history_index < len(self.database_history) - 1:
+            self.history_index += 1
+            next_db = self.database_history[self.history_index]
+            print(f"Going to {next_db}")
+            self.open_db(next_db, no_history=True)
 
     def init_game_list(self, db: str):
         new_model = GameListModel(db)
