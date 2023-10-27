@@ -1,12 +1,14 @@
 import asyncio
+import os
 from typing import Optional
 
 from PyQt6 import QtWidgets, QtGui, QtCore
 import sys
 import chess.pgn
-from PyQt6.QtCore import QModelIndex
+from PyQt6.QtCore import QModelIndex, QSize
+from PyQt6.QtGui import QIcon
 from qasync import QEventLoop
-from PyQt6.QtWidgets import QFileDialog, QDialogButtonBox, QPushButton
+from PyQt6.QtWidgets import QFileDialog, QDialogButtonBox, QPushButton, QVBoxLayout, QHBoxLayout, QGraphicsPixmapItem
 import PyQt6
 import Ilmarinen.chess_board_widget
 from Ilmarinen.pyocgdb import OpenChessGameDatabase
@@ -46,29 +48,80 @@ class SearchWindowChessboard(Ilmarinen.chess_board_widget.Chessboard):
         super().__init__(hub=hub)
         self.hub = hub
         self.game_state = SearchWindowChessboardInfo(self.hub)
+        self.selected_from_board = False
+        self.selected_piece = None
 
     def reset_board(self):
         self.game_state = SearchWindowChessboardInfo(self.hub)
         self.refresh_board()
 
     def empty_board(self):
-        raise NotImplemented
+        self.game_state.board.clear()
+        self.refresh_board()
 
     def change_free_mode(self):
         self.game_state.free_mode = not self.game_state.free_mode
+
+    def mousePressEvent(self, event):
+        if self.promotion_ribbon is not None:
+            self.close_current_piece_ribbon()
+        item = self.itemAt(event.pos())
+        if isinstance(item, QGraphicsPixmapItem):
+            square = item.square
+        else:
+            square = item
+        if isinstance(square, Ilmarinen.chess_board_widget.ChessSquare):
+            if self.selected_piece is None:
+                piece = self.game_state.board.piece_at(chess.parse_square(square.square_name))
+                if piece is not None:
+                    print(f"picked up piece {square}")
+                    self.selected_from_board = True
+                    self.selected_piece = piece
+            else:
+                print("I'm in else")
+                print(chess.parse_square(square.square_name))
+                self.game_state.board.set_piece_at(chess.parse_square(square.square_name), self.selected_piece)
+                self.refresh_board()
+                if self.selected_from_board:
+                    self.selected_from_board = False
+                    self.selected_piece = None
+
+        # super().mousePressEvent(event)
 
 
 class SearchWindow(Ilmarinen.chess_board_widget.ChessBoardWithControls):
     def __init__(self, hub):
         super().__init__(hub=hub)
         # self.chessboard = self.create_chessboard()
-        self.empty_board_button = QPushButton("Empty board")
+        img_path = os.path.join(os.getcwd(), 'resources', 'chessboard', 'buttons')
+        self.empty_board_button = QPushButton()
         self.empty_board_button.clicked.connect(self.chessboard.empty_board)
-        self.layout.addWidget(self.empty_board_button, 1, 2, 1, 1)
-        self.free_mode_button = QPushButton("Board setup mode")
-        self.free_mode_button.clicked.connect(self.chessboard.change_free_mode)
-        self.layout.addWidget(self.free_mode_button, 1, 3, 1, 1)
+        self.empty_board_button.setIcon(QIcon(os.path.join(img_path, 'empty-chessboard.png')))
+        self.empty_board_button.setIconSize(QSize(32, 32))  # Adjust this size if needed.
+        self.empty_board_button.setFixedSize(QSize(32, 32))  # Adjust this size if needed.
+        self.button_layout.addWidget(self.empty_board_button)
+        self.add_ribbons()
 
+    def add_ribbons(self):
+        self.piece_ribbon_white = Ilmarinen.chess_board_widget.PieceRibbon(color="white", display_pieces=['K', 'Q', 'R', 'B', 'N', 'P'],
+                                                                           layout_type=QVBoxLayout,
+                                                                           promotion=False)
+        self.piece_ribbon_black = Ilmarinen.chess_board_widget.PieceRibbon(color="black",
+                                                                           display_pieces=['K', 'Q', 'R', 'B', 'N', 'P'],
+                                                                           layout_type=QVBoxLayout,
+                                                                           promotion=False)
+        self.piece_layout = QHBoxLayout()
+        self.piece_layout.addWidget(self.piece_ribbon_white)
+        self.piece_layout.addWidget(self.piece_ribbon_black)
+        self.layout.addLayout(self.piece_layout, 0, 1, 2, 1)
+        self.piece_ribbon_black.piece_selected.connect(
+            lambda piece: self.set_selected_piece(chess.Piece.from_symbol(piece)))
+        self.piece_ribbon_white.piece_selected.connect(
+            lambda piece: self.set_selected_piece(chess.Piece.from_symbol(piece)))
+
+    def set_selected_piece(self, piece):
+        self.chessboard.selected_piece = piece
+        self.chessboard.selected_from_board = False
     def create_chessboard(self):
         return SearchWindowChessboard(hub=self.hub)
 
@@ -208,7 +261,13 @@ class DatabaseWidget(QtWidgets.QWidget):
                                     asynchronous=True, return_pgn_object=False
         '''
         print(f"Search requested with fen\n {fen}")
-        await self.hub.produce_event_async(Event.DatabaseSearch, fen=fen, db=self.current_db, asynchronous=True)
+        status_check = chess.Board(fen).status()
+        if status_check == chess.STATUS_VALID:
+            await self.hub.produce_event_async(Event.DatabaseSearch, fen=fen, db=self.current_db, asynchronous=True)
+        else:
+            print(f"Provided FEN is not valid!")
+            print(status_check)
+
 
     @QtCore.pyqtSlot()
     def open_search_dialog(self):

@@ -4,7 +4,7 @@ import chess
 import chess.engine
 from PyQt6.QtCore import QTimer, QSizeF, QSize
 from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QTextEdit, QLabel, QMessageBox, QInputDialog, QFileDialog, \
-    QGridLayout, QSizePolicy
+    QGridLayout, QSizePolicy, QHBoxLayout
 from qasync import asyncSlot
 
 from Ilmarinen.chess_board_widget import ChessBoardWithControls
@@ -21,43 +21,20 @@ class ChessEngineWidget(CustomWidget):
         self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
         self.hub = hub
         self.main_window = main_window
-        self.analysis_running = False
-        # Create a QVBoxLayout instance
+
         self.layout = QGridLayout(self)
-        # Create QPushButton for browsing file
-        self.browse_button = QPushButton('Browse')
-        self.browse_button.clicked.connect(self.browse_file)
+        self.init_buttons()
         self.best_moves_text = QTextEdit()
         self.analysis_text = QLabel()
-        # Create QPushButton for adding more best lines
-        self.add_line_button = QPushButton("+", self)
-        self.add_line_button.clicked.connect(self.add_line)
         self.num_lines = 1
-        # Create QPushButton for removing best lines
-        self.remove_line_button = QPushButton("-", self)
-        self.remove_line_button.clicked.connect(self.remove_line)
-        # Create QLabel for showing the selected file
         self.file_label = QLabel('No file selected.')
-        # Create QPushButton for starting analysis
-        self.analysis_button = QPushButton('Start')
-        self.analysis_button.clicked.connect(self.toggle_analysis)
         self.engine = None
         self.analysis_result = None
-        # Create QTextEdit for showing the analysis results
         self.should_stop_analysis = asyncio.Event()
         self.analysis_running = asyncio.Event()
-        # Add all widgets to the layout
-        self.layout.addWidget(self.browse_button, 0, 0)
-        # self.layout.addWidget(self.file_label)
-        self.layout.addWidget(self.analysis_button, 0, 1)
-        # self.layout.addWidget(self.results_text, 1, 0)
-        self.layout.addWidget(self.analysis_text, 2, 0, 1, 1)
-        self.layout.addWidget(self.best_moves_text, 3, 0, 1, 5)
-        self.layout.addWidget(self.add_line_button, 0, 3)
-        self.layout.addWidget(self.remove_line_button, 0, 4)
-        # self.layout.setRowStretch(0, 1)
-        # self.layout.setRowStretch(1, 5)
-        # self.layout.setRowStretch(2, 5)
+        self.layout.addWidget(self.analysis_text, 1, 0, 1, 1)
+        self.layout.addWidget(self.best_moves_text, 2, 0, 1, 1)
+
 
         # Set layout
         self.setLayout(self.layout)
@@ -65,7 +42,23 @@ class ChessEngineWidget(CustomWidget):
         # Initially, no engine is selected
         self.engine_path = None
         self.analysis_button.setEnabled(False)
+        self.deploy_default_engine()
 
+    def init_buttons(self):
+        self.browse_button = QPushButton('Browse')
+        self.browse_button.clicked.connect(self.browse_file)
+        self.remove_line_button = QPushButton("-", self)
+        self.remove_line_button.clicked.connect(self.remove_line)
+        self.analysis_button = QPushButton('Start')
+        self.analysis_button.clicked.connect(self.toggle_analysis)
+        self.add_line_button = QPushButton("+", self)
+        self.add_line_button.clicked.connect(self.add_line)
+        self.button_layout = QHBoxLayout()
+        self.layout.addLayout(self.button_layout, 0, 0)
+        self.button_layout.addWidget(self.browse_button)
+        self.button_layout.addWidget(self.analysis_button)
+        self.button_layout.addWidget(self.add_line_button)
+        self.button_layout.addWidget(self.remove_line_button)
     @asyncSlot()
     async def board_changed(self, **kwargs):
         # No need to call asyncio.run
@@ -83,8 +76,10 @@ class ChessEngineWidget(CustomWidget):
         self.should_stop_analysis = asyncio.Event()
         self.analysis_running.set()
         try:
-            transport, engine = await chess.engine.popen_uci(self.engine_path)
-
+            try:
+                transport, engine = await chess.engine.popen_uci(self.engine_path)
+            except Exception as e:
+                print(f"Failed to load engine. {str(e)}")
             number_of_lines = self.num_lines
             with await engine.analysis(self.linked_board_widget, multipv=self.num_lines) as analysis:
                 i = 0
@@ -109,35 +104,49 @@ class ChessEngineWidget(CustomWidget):
 
     @asyncSlot()
     async def toggle_analysis(self):
-        print("Toggle analysis")  # Start of the method debug output
         try:
             if not self.engine_path:
-                self.file_label.setText('No engine file selected.')
                 return
 
-            if self.analysis_button.text() == "Start analysis":
-                self.analysis_button.setText("Stop analysis")
+            if self.analysis_button.text() == "Start":
+                self.analysis_button.setText("Stop")
                 if not hasattr(self, 'linked_board_widget'):
                     QMessageBox.critical(self, "Error", "No board linked to this engine", QMessageBox.Ok)
                     return
-                await self.start_analysis_async()  # Debug message surrounding the call in question
-                print("Start analysis call completed")  # Completion of the call debug output
+                await self.start_analysis_async()
             else:
-                self.analysis_button.setText("Start analysis")
-                self.should_stop_analysis = True
+                self.analysis_button.setText("Start")
+                self.should_stop_analysis.set()
         except Exception as e:
             print(f"Error in toggle_analysis: {str(e)}")  # If any exceptions occur, print them
 
     def board_created_event(self, **kwargs):
-        print(f'Entered board_created_event with {kwargs}')
         self.linked_board_widget = kwargs.get('board').game_state.board
-        # self.link_board_button.setText("Linked to Board " + kwargs.get('board').uuid)
 
     def parse_info(self, info):
         try:
-            pv = [str(move) for move in info["pv"]]
-            lines = " ".join(map(str, pv))
-            # get values from info or default to None if they are not existent
+            # Create a copy of the board to safely simulate the moves
+            board = self.linked_board_widget.copy()
+
+            # Parse each move into SAN notation, simulating the moves on the board copy
+            pv = info["pv"]
+            san_moves = []
+
+            for move_num, move in enumerate(pv, start=1):
+                san_move = board.san(move)
+                fullmove_number = board.fullmove_number
+                if (move_num == 1) and (board.turn == chess.BLACK):
+                    san_move = f"{fullmove_number}...{san_move}"
+                elif (board.turn == chess.BLACK) and (move_num != 1):
+                    san_move = f"{san_move}"
+                else:
+                    san_move = f"{fullmove_number}.{san_move}"
+
+                san_moves.append(san_move)
+                # Apply the move on a copy of the board, not the original
+                board.push(move)
+
+            lines = " ".join(san_moves)
             depth, seldepth = info.get("depth", None), info.get("seldepth", None)
             score = info.get("score", None)
             multipv = info.get("multipv", None)
@@ -145,6 +154,9 @@ class ChessEngineWidget(CustomWidget):
         except Exception as e:
             print(str(e))
 
+    def deploy_default_engine(self):
+        self.engine_path = 'stockfish'
+        self.analysis_button.setEnabled(True)
     def parse_evaluation(self, score):
         centipawn_value = int(str(score))
         printable = round(centipawn_value / 100, 2)
@@ -177,7 +189,8 @@ class ChessEngineWidget(CustomWidget):
         current_best_moves = self.best_moves_text.toPlainText().split('\n')
         if multipv <= len(current_best_moves):
             current_best_moves[
-                multipv - 1] = f"{self.parse_evaluation(parsed_result.get('score').white())} {multipv}. {lines}"  # Remember that multipv is 1-indexed but Python lists are 0-indexed
+                multipv - 1] = f" {multipv}. {self.parse_evaluation(parsed_result.get('score').white())} {lines}"
+            # Remember that multipv is 1-indexed but Python lists are 0-indexed
         else:
             current_best_moves.append(f"{multipv}. {lines}")
         self.best_moves_text.setText("\n".join(current_best_moves))
@@ -202,26 +215,10 @@ class ChessEngineWidget(CustomWidget):
         if filename:
             # Successfully selected a file.
             # Update the label and keep track of the file's path
-            self.file_label.setText(f'Selected engine: {filename}')
             # print(filename)
             self.engine_path = filename
             self.analysis_button.setEnabled(True)
 
-    def link_board(self):
-        items, ok = QInputDialog.getItem(
-            self, "Select target board", "Please select the board to link this engine to",
-            self.available_boards(), editable=False)
-        # print(items, ok)
-        if ok and items:
-            item_uuid = items.split(":")[-1]  # assuming uuid at the end
-            linked_board_widget = self.get_main_window().widgetDict[ChessBoardWithControls].get(item_uuid)
-            if linked_board_widget:
-                self.linked_board_widget = linked_board_widget.chessboard
-                # self.link_board_button.setText("Linked to Board " + str(items))
-            else:
-                QMessageBox.critical(self, "Error",
-                                     "Failed to link the selected board",
-                                     QMessageBox.Ok)
 
     def get_main_window(self):
         return self.main_window

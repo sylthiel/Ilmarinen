@@ -3,7 +3,7 @@ from typing import Optional
 
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGridLayout, QWidget, \
-    QPushButton, QGraphicsPixmapItem, QGraphicsItem, QHBoxLayout, QDialog, QSizePolicy
+    QPushButton, QGraphicsPixmapItem, QGraphicsItem, QHBoxLayout, QDialog, QSizePolicy, QVBoxLayout
 from PyQt6.QtGui import QColor, QPen, QPixmap, QImage, QIcon
 from PyQt6.QtCore import Qt, QRectF, QSize, pyqtSignal
 import sys, os
@@ -35,37 +35,42 @@ def load_piece_assets():
 
 class PieceRibbon(QDialog):
     piece_selected = pyqtSignal(str)
-    def __init__(self, color="white", display_pieces=None):
+    def __init__(self, color="white", display_pieces=None, layout_type=QHBoxLayout, promotion=True):
         super().__init__()
         self.color = color
-        ribbon_height = 100  # height of the QDialog
-        self.setFixedHeight(ribbon_height)
+        ribbon_dimension = 100
+        if layout_type == QHBoxLayout:
+            self.setFixedHeight(ribbon_dimension)
+        elif layout_type == QVBoxLayout:
+            self.setFixedWidth(ribbon_dimension)
         self.display_pieces = ['N', 'B', 'R', 'Q'] if display_pieces is None else display_pieces
         if self.color == "black":
             self.display_pieces = [piece.lower() for piece in self.display_pieces]
         self.piece_translation = load_piece_assets()
         self.selected_piece = None
-        layout = QHBoxLayout()
+        layout = layout_type()
         self.setLayout(layout)
         for piece in self.display_pieces:
             image = QImage(self.piece_translation[piece])
             scaled_image = image.scaled(
-                int(0.8 * ribbon_height), int(0.8 * ribbon_height),  # Scale the image based on 80% of the QDialog height
+                int(0.8 * ribbon_dimension), int(0.8 * ribbon_dimension),
                 Qt.AspectRatioMode.KeepAspectRatio,
                 QtCore.Qt.TransformationMode.SmoothTransformation  # High quality filter
             )
             pixmap = QPixmap.fromImage(scaled_image)
             button = QPushButton()
             button.setIcon(QIcon(pixmap))
-            button.setIconSize(QSize(int(0.8 * ribbon_height), int(0.8 * ribbon_height)))  # Set the icon size as 80% of the QDialog height
+            button.setIconSize(QSize(int(0.8 * ribbon_dimension), int(0.8 * ribbon_dimension)))  # Set the icon size as 80% of the QDialog height
             button.setStyleSheet("QPushButton {background-color: none; border: none;}")  # Remove button border
             button.clicked.connect(lambda x, p=piece: self.select_piece(p))
             layout.addWidget(button)
+        self.is_for_promotion = promotion
 
     def select_piece(self, piece):
         self.selected_piece = piece
         self.piece_selected.emit(piece)  # Emit Signal when a piece is selected
-        self.close()
+        if self.is_for_promotion:
+            self.close()
 
 class GameState:
     def __init__(self, hub: Ilmarinen.widgethub.WidgetHub):
@@ -300,11 +305,12 @@ class ChessBoardWithControls(QWidget):
         self.setWindowTitle('Chess Board')
 
     def put_board_on_layout(self, board):
-        self.layout.addWidget(board, 0, 0, 1, 2)
+        self.layout.addWidget(board, 0, 0, 1, 1)
 
     def init_buttons(self):
         img_path = os.path.join(os.getcwd(), 'resources', 'chessboard', 'buttons')
-
+        self.button_layout = QHBoxLayout()
+        self.layout.addLayout(self.button_layout, 1, 0)
         self.reset_button = QPushButton()
         self.reset_button.setIcon(QIcon(os.path.join(img_path, 'reset.png')))
         self.reset_button.setIconSize(QSize(32, 32))  # Adjust this size if needed.
@@ -317,8 +323,8 @@ class ChessBoardWithControls(QWidget):
         self.flip_button.setFixedSize(QSize(32, 32))  # Adjust this size if needed.
         self.flip_button.clicked.connect(self.chessboard.flip_board)
 
-        self.layout.addWidget(self.reset_button, 1, 0, 1, 1)
-        self.layout.addWidget(self.flip_button, 1, 1, 1, 1)
+        self.button_layout.addWidget(self.reset_button)
+        self.button_layout.addWidget(self.flip_button)
 
     def create_chessboard(self):
         return Chessboard(hub=self.hub)

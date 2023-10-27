@@ -16,6 +16,8 @@ class Event(Enum):
     GameTraversal = "GameTraversal"
     DatabaseSearch = "DatabaseSearch"
     DatabaseSearchCompleted = "DatabaseSearchCompleted"
+    ArrowLeft = "ArrowLeft"
+    ArrowRight = "ArrowRight"
     # replace Event logic due to switching to aenum.Enum allowing extend_enum()
 
 

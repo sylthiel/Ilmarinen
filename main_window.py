@@ -1,6 +1,6 @@
 import asyncio
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtWidgets import QWidget, QGridLayout, QApplication, QTabWidget, QMainWindow, QSplitter, QTextEdit
 from qasync import QEventLoop
 
@@ -9,9 +9,6 @@ from Ilmarinen.chess_engine_widget import ChessEngineWidget
 from Ilmarinen.database_widget import DatabaseWidget
 from Ilmarinen.notation_widget import NotationWidget
 from Ilmarinen.widgethub import WidgetHub, Event
-
-
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -34,7 +31,9 @@ class MainWindow(QMainWindow):
 
         self.hub.register_listener(self.notation_widget,{
             Event.GameMove: self.notation_widget.handle_move,
-            Event.GameLoaded: self.notation_widget.handle_game_loaded
+            Event.GameLoaded: self.notation_widget.handle_game_loaded,
+            Event.ArrowLeft: self.notation_widget.move_back,
+            Event.ArrowRight: self.notation_widget.move_forward
         })
 
         self.hub.register_listener(self, {
@@ -49,6 +48,18 @@ class MainWindow(QMainWindow):
     def switch_tab_on_load(self, **kwargs):
         self.tabWidget.setCurrentIndex(0)
 
+    def eventFilter(self, obj, event):
+        key_to_event = {
+            Qt.Key.Key_Left: Event.ArrowLeft,
+            Qt.Key.Key_Right: Event.ArrowRight
+         }
+        if event.type() == QEvent.Type.KeyPress:
+            if event.key() in key_to_event:
+                self.hub.produce_event(key_to_event[event.key()])
+            return True
+        else:
+            return super().eventFilter(obj, event)
+
     def create_first_tab(self):
         tab1 = QWidget()
         layout1 = QGridLayout(tab1)
@@ -58,7 +69,6 @@ class MainWindow(QMainWindow):
         splitter_notation_engine = QSplitter(Qt.Orientation.Vertical)
         splitter_notation_engine.addWidget(self.notation_widget)
         splitter_notation_engine.addWidget(self.chess_engine)
-
         # The main splitter between the ChessBoardWithControls and the other widgets
         splitter_main = QSplitter(Qt.Orientation.Horizontal)
         splitter_main.addWidget(self.chess_board)
@@ -81,7 +91,7 @@ if __name__ == '__main__':
     mainWindow = MainWindow()
     mainWindow.resize(1280, 800)
     mainWindow.show()
-
+    app.installEventFilter(mainWindow)
     # async magic that fixes the backend process stopping UI interaction
     loop = QEventLoop(app)
     asyncio.set_event_loop(loop)

@@ -174,6 +174,7 @@ class NotationWidget(CustomWidget):
         self.board.game_state.board.set_fen(node.board().fen())
         self.hub.produce_event(Event.GameTraversal, board=self.latest_node.board())
         self.hub.produce_event(Event.BoardChange, board=self.latest_node.board())
+        self.update_pgn_display()
 
     def move_forward(self):
         # Comparing with the total number of moves, which should be retrieved from your chess board object
