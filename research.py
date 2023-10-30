@@ -12,22 +12,22 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
         # Define a QGridLayout for your central widget
-        self.layout = QGridLayout(central_widget)
+        self.grid_layout = QGridLayout(self)
 
         # Add QPushButton instances into the grid layout
         for i in range(2):
             for j in range(3):
                 button = QPushButton(f"Button {i+1}-{j+1}")
-                self.layout.addWidget(button, i, j)
+                self.grid_layout.addWidget(button, i, j)
 
         # Add QLabel into the grid layout
         label = QLabel("Label")
-        self.layout.addWidget(label, 2, 0, 1, 2)
+        self.grid_layout.addWidget(label, 2, 0, 1, 2)
 
         # Add QPushButton that opens a LayoutWizard
         self.open_layout_wizard_button = QPushButton("Open LayoutWizard")
         self.open_layout_wizard_button.clicked.connect(self.open_layout_wizard)
-        self.layout.addWidget(self.open_layout_wizard_button, 2, 2)
+        self.grid_layout.addWidget(self.open_layout_wizard_button, 2, 2)
         self.layout_wizard = LayoutWizard(self)
 
     def open_layout_wizard(self):
